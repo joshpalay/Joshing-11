@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db, masteryEvents, playerMastery } from '@/server/db';
 import { maybeNotifyInviterOfFirstFive } from '@/server/activity/invite-onboarding';
+import { getCanonicalQuestionDomain, isGraphAncestor } from '@/server/db/queries/knowledge-graph';
 import { evaluateQuestionTrustOnPlay } from '@/server/db/queries/trust-promotion';
 import { effectiveTier } from '@/server/mastery/tiers';
 import type { LlmProvider } from '@/server/llm/provider';
@@ -33,6 +34,50 @@ function resolveToExistingTerritory(
 ): string {
   const key = domainKey(incoming);
   return existingCanonicals.find((label) => domainKey(label) === key) ?? incoming;
+}
+
+export type CreditDomainDeps = {
+  getQuestionDomain: (questionId: string) => Promise<string | null>;
+  isAncestor: (childKey: string, ancestorKey: string) => Promise<boolean>;
+};
+
+const defaultCreditDomainDeps: CreditDomainDeps = {
+  getQuestionDomain: getCanonicalQuestionDomain,
+  isAncestor: isGraphAncestor,
+};
+
+/**
+ * Credit the FINEST area the question is filed under (D-MASTERY-FINEST-NODE-01;
+ * mastery v2 spec decision 1: an event buckets to its question's CURRENT
+ * domain). The served domain comes from the player's GeneratedQuestion copy,
+ * which keeps the slot domain it was generated under — so a Hamlet question
+ * served in a "Shakespearean Tragedy" slot credited only the parent, and the map
+ * showed Hamlet as "not started". When the canonical Question sits in a
+ * descendant of the served domain, credit that descendant instead; the map and
+ * v2 mastery roll it back up to every ancestor at full value, so it counts for
+ * both. Anything else (same area, an unrelated re-file, no canonical row, a
+ * lookup fault) keeps the served domain — fail-open, never blocks an answer.
+ */
+export async function resolveCreditDomain(
+  servedDomain: string,
+  questionId: string | null | undefined,
+  deps: CreditDomainDeps = defaultCreditDomainDeps,
+): Promise<string> {
+  if (!questionId) return servedDomain;
+  try {
+    const questionDomain = (await deps.getQuestionDomain(questionId))?.trim();
+    if (!questionDomain) return servedDomain;
+    const childKey = domainKey(questionDomain);
+    const servedKey = domainKey(servedDomain);
+    if (childKey === servedKey) return servedDomain;
+    return (await deps.isAncestor(childKey, servedKey)) ? questionDomain : servedDomain;
+  } catch (error) {
+    console.warn('[mastery] credit-domain resolve failed; keeping served domain', {
+      questionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return servedDomain;
+  }
 }
 
 type MasteryEventSourceType = 'daily' | 'feed' | 'joshing_game' | 'catchup' | 'author_credit' | 'curator_credit';
@@ -208,8 +253,17 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
     .from(playerMastery)
     .where(eq(playerMastery.userId, params.userId));
 
+  const isCreditSource = params.sourceType === 'author_credit' || params.sourceType === 'curator_credit';
+  const creditDomain = isCreditSource
+    ? params.domain
+    : await resolveCreditDomain(params.domain, params.eventQuestionId);
+  // Serving stays flat (D-MASTERY-FINEST-NODE-01): crediting a finer area must
+  // not quietly add it to the Daily Five rotation. A row it opens is parked out
+  // of rotation (the map doesn't filter on it), and an update never flips one in.
+  const creditedToFinerArea = domainKey(creditDomain) !== domainKey(params.domain);
+
   const domain = resolveToExistingTerritory(
-    params.domain,
+    creditDomain,
     userTerritories.map((row) => row.canonicalSubcategory),
   );
   const existing = userTerritories.find((row) => row.canonicalSubcategory === domain);
@@ -278,6 +332,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
       const overturned = await tx.execute<{ id: string }>(sql`
         update "MASTERY_EVENTS"
         set "answer_state" = ${params.answerState ?? null},
+            "canonical_subcategory" = ${domain},
             "awarded_points" = ${params.pointsAwarded},
             "base_points" = ${Math.round(params.basePoints ?? params.pointsAwarded)},
             "weight" = ${params.weight ?? (params.pointsAwarded > 0 ? 1 : 0)}
@@ -309,7 +364,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
           tier: nextTier,
           tierReachedAt: tierChanged ? new Date() : null,
           lifetimePointsBaseline: 0,
-          rotationEligible: true,
+          rotationEligible: !creditedToFinerArea,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -322,7 +377,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
             // A non-bonus answer UPGRADES a previously bonus-only domain into the
             // rotation; a bonus answer never downgrades an already-eligible row,
             // so only set the flag from the non-bonus path.
-            ...(params.isBonus ? {} : { rotationEligible: true }),
+            ...(params.isBonus || creditedToFinerArea ? {} : { rotationEligible: true }),
             updatedAt: new Date(),
           },
         });
