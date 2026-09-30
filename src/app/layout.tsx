@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Cormorant_Garamond, Josefin_Sans, Montserrat } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
@@ -10,12 +10,20 @@ import { Nav } from "@/components/Nav";
 // import { PaletteToggle } from "@/components/dev/PaletteToggle";
 import { getSessionToken, readSessionClaims } from '@/server/auth/session';
 
+// All three families are self-hosted from ./fonts (Google Fonts' latin
+// variable files, SIL OFL — see ./fonts/README.md). next/font/google fetched
+// them from Google at build time, and on 2026-09-30 Google briefly served
+// `/l/font?kit=…&skey=…` URLs that Turbopack's font loader can't parse, which
+// failed a production build. Local files take Google out of the build.
+
 // Josefin Sans is the app's body/UI sans font (2026-06-16). It drives
 // --font-sans-body, which cascades to --font-sans, --font-neutral and
 // --font-mono. The one exception is the "Joshing" wordmark, which stays in
 // Montserrat (loaded below as --font-montserrat / surfaced as font-wordmark).
-const josefin = Josefin_Sans({
-  subsets: ['latin'],
+const josefin = localFont({
+  src: './fonts/josefin-sans-latin-100-700.woff2',
+  weight: '100 700',
+  style: 'normal',
   variable: '--font-sans-body',
   display: 'swap',
 })
@@ -24,8 +32,10 @@ const josefin = Josefin_Sans({
 // LoadingScreen, login title, knowledge-card wordmarks). Exposed via
 // --font-montserrat and surfaced to Tailwind as `font-wordmark` in globals.css.
 // (Previously the app-wide body font; replaced by Josefin Sans 2026-06-16.)
-const montserrat = Montserrat({
-  subsets: ['latin'],
+const montserrat = localFont({
+  src: './fonts/montserrat-latin-100-900.woff2',
+  weight: '100 900',
+  style: 'normal',
   variable: '--font-montserrat',
   display: 'swap',
 })
@@ -34,14 +44,17 @@ const montserrat = Montserrat({
 // display/card/question|update|action). Cormorant Garamond is the project's
 // "Garamond" — used for headlines and feed-card question/answer text. Exposed
 // via --font-cormorant and surfaced to Tailwind as `font-serif` in globals.css.
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  // 700 added for the gameplay question/answer text (Figma display/game/question
-  // is Cormorant Bold 28). Without it the bold synthesizes from 600.
-  weight: ['500', '600', '700'],
-  style: ['normal', 'italic'],
+const cormorant = localFont({
+  // 500–700: 700 is for the gameplay question/answer text (Figma
+  // display/game/question is Cormorant Bold 28). Without it the bold
+  // synthesizes from 600.
+  src: [
+    { path: './fonts/cormorant-garamond-latin-500-700.woff2', weight: '500 700', style: 'normal' },
+    { path: './fonts/cormorant-garamond-latin-500-700-italic.woff2', weight: '500 700', style: 'italic' },
+  ],
   variable: '--font-cormorant',
   display: 'swap',
+  adjustFontFallback: 'Times New Roman',
 })
 
 export const metadata: Metadata = {
