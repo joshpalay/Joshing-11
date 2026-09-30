@@ -211,8 +211,8 @@ const overRequest = (needed: number) =>
 //
 // This is a cost optimization, not the correctness boundary: two builds on
 // DIFFERENT instances skip this map entirely, and the real swap-proofing lives
-// in persistDailyQueue's first-writer-wins ON CONFLICT DO NOTHING (so a
-// cross-instance loser still can't overwrite the served queue). We deliberately
+// in persistDailyQueue's first-writer-wins conflict rule (so a cross-instance
+// loser still can't overwrite the served queue; only an EMPTY row is replaced). We deliberately
 // do NOT use a DB advisory lock held across generation: the daily cron runs
 // USER_CONCURRENCY=4 builds against the max:5 pool, and pinning a connection per
 // build for its whole duration would starve that pool.
@@ -1557,6 +1557,9 @@ async function buildDailyQueueForUser(
       {
         userId,
         winningQueueId: persistResult.row.id,
+        // Never 0 on a healthy build -- persist replaces an empty row, so a 0
+        // here means that guard has regressed (QA 2026-09-29, C1).
+        winningSlots: asQueueSlots(persistResult.row.slots).length,
       },
     );
     const buildCtx = currentBuildContext();

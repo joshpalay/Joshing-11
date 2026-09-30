@@ -1291,8 +1291,17 @@ export async function persistDailyQueue(
         slots,
         targetSize: DAILY_QUEUE_SIZE,
       })
-      .onConflictDoNothing({
+      // First writer wins -- EXCEPT over a row with no slots at all. An empty
+      // row holds nothing a player could be answering, and the orchestrator
+      // (like GET /api/daily/queue) treats it as "no queue", so under plain
+      // DO NOTHING every rebuild lost to it and the player was stuck on
+      // "not ready yet" for the whole day (QA 2026-09-29, C1). The setWhere
+      // keeps a populated row untouchable: the conflict is then a no-op,
+      // RETURNING is empty, and this build reports won:false as before.
+      .onConflictDoUpdate({
         target: [dailyQueues.userId, dailyQueues.queueDate],
+        set: { slots: sql`excluded.slots`, targetSize: sql`excluded.target_size` },
+        setWhere: sql`jsonb_array_length(${dailyQueues.slots}) = 0`,
       })
       .returning();
 
@@ -1305,8 +1314,8 @@ export async function persistDailyQueue(
 
     if (row) return { row, won: true };
 
-    // Conflict hit an existing row, so DO NOTHING was a no-op and RETURNING
-    // produced nothing. This build lost the race; hand back the queue that won
+    // Conflict hit an existing populated row, so the guarded update was a no-op
+    // and RETURNING produced nothing. This build lost the race; hand back the queue that won
     // (unchanged) so the caller serves the one the player is already on --
     // `won: false` is the signal that must stop the caller doing anything
     // further with ITS OWN slots array or a position derived from it.
