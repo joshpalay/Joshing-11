@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-29
+last-reviewed: 2026-09-30
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -1347,5 +1347,89 @@ review.
    doc), re-check whether this doc's build-time p50 recovers.
 4. Keep an eye on `batch_dedup` `failed_open` (17/256, flat) and
    `recent_history` (4/256, ticked up) on the rolling 14-day window.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-09-30 (diagnosis-review) — a new PR touches the same overturn path #1720 fixed, additively not a revert; four new pending disputes but zero new reviews; `batch_dedup` ticks up again; `subject_entity` coverage holds; build p50 eases
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. No
+`.env`/`.env.local` present locally (only `.env.example`).
+
+**New PR touching this doc's tracked `write-mastery-event.ts`, read by
+diff not title: `#1733`** ("fix(mastery): credit the finest area a question
+is filed under"), merged 2026-09-29T21:11:45-04:00 (per `main`'s own commit
+timestamp). This is **not** about grading fairness or dispute resolution —
+it fixes a different bug (a served question's slot domain crediting only
+the parent territory when the canonical question sits in a more specific
+descendant, e.g. a Hamlet question served under "Shakespearean Tragedy"
+crediting only the parent and leaving Hamlet itself "not started" on the
+mastery map). Flagging it here only because its diff touches the exact
+`overturned` UPDATE statement `#1720` added for the dispute-mastery fix
+this doc tracks (§ 2026-09-27 entry) — `#1733` adds `"canonical_subcategory"
+= ${domain}` to that same `SET` clause, so a won dispute's overturn now also
+corrects the credited domain to the finest area, on top of what `#1720`
+already fixed. Read directly: the `overturnIncorrect` gate condition itself
+(`!inserted && params.overturnIncorrect && params.eventQuestionId`) is
+**unchanged** — this is additive, not a revert or behavior change to the
+mechanism `#1720` fixed. Not relevant to any of this doc's six open
+decisions; noting it so a future reviewer isn't surprised to see this file
+touched again without it being about the dispute queue.
+
+**`#1702` dispute queue: four new pending rows, still zero new reviews.**
+`GradeDispute` status counts (all-time): `pending` **47** (was 43),
+`alternative_added` 31 (unchanged), `dismissed` 5 (unchanged). Latest
+`reviewed_at` across the whole table is still **2026-09-27T17:11:14.935Z**
+— byte-identical to the last review. No progress on the standing question
+of whether `GradeDispute` growth reflects staff review or the automated
+recheck path agreeing with itself.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0 of 239** newly-generated rows missing it (was 0
+of 207 last review).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 306 | 35 | **4** |
+| `batch_dedup` | 306 | 19 | **18** |
+| `quality` | 306 | 120 (39.2%) | 0 |
+
+`recent_history`'s `failed_open` is flat at 4. `batch_dedup`'s `failed_open`
+ticked up again, 17→18, continuing its slow upward trend on the rolling
+window. `quality`'s scoped drop rate (39.2%) stays inside the acceptable
+band. Neither counter is root-caused; same "flagging for awareness" posture
+as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`): 35,292ms** (n=29),
+eased slightly from the last reading (36,633ms, n=28) — still well above
+the 25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-09-30 entry (read, not
+re-derived): that doc's outlier/elevated-residual cluster grew again today
+(13→15 of 46 post-deferral rows), so the standing explanation for the
+elevated p50 is unchanged even though this particular reading eased.
+
+**No code change to this doc's own tracked test/script files**
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`)
+since the last review — the one relevant commit, `#1733`, touches
+`write-mastery-event.ts` only (covered above).
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — `#1720`'s fix is
+   confirmed live and `#1733` extends the same code path additively; still
+   a plumbing matter, not fairness evidence.
+2. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not directly investigated; no new resolutions since
+   2026-09-27 to check against anyway.
+3. Once the outlier builds are traced (now 15 named per the cross-referenced
+   doc), re-check whether this doc's build-time p50 recovers.
+4. Keep an eye on `batch_dedup` `failed_open` (18/306, still trending up)
+   and `recent_history` (4/306, flat) on the rolling 14-day window.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
