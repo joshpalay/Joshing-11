@@ -285,6 +285,13 @@ async function handleDailyCatchupAnswer({
       catchup_submitted_answer: submittedAnswer,
       catchup_awarded_points: pointsAwarded,
       catchup_answered_at: new Date().toISOString(),
+      // A fresh attempt gets a fresh appeal. The slot comes back after a wrong
+      // try (CATCHUP_RETRY_COOLDOWN_MS); without this reset an earlier appeal's
+      // verdict stayed on the slot, the result still offered "Argue your point",
+      // and the recheck route refused it as "already been rechecked" — throwing
+      // the player's new argument away (QA 2026-10-01, S2).
+      catchup_recheck_status: undefined,
+      catchup_recheck_reason: undefined,
       reveal_canonical_answer: catchupItem.correctAnswer,
       reveal_explainer: catchupItem.explanation ?? '',
       reveal_quip: grade.consolation,

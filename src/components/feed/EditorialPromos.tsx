@@ -14,6 +14,7 @@ import { circleDatasetMax, DomainCircleSvg } from '@/components/profile/common-g
 import type { StreamEmbed } from '@/lib/activity-stream';
 import type { NearbyTerritory } from '@/lib/daily/territory-model';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { addedTopicMessage, type AddedTopic } from '@/lib/topic-added-copy';
 
 // The "Overlap" circles render larger here than on the profile page — the
 // motif is the hero artwork, so it should catch the eye before the copy.
@@ -321,7 +322,7 @@ export function AddATopicFeature({
   // `created` comes from the POST response: an idempotent re-add of a topic the
   // viewer already holds returns created:false, and Undo must not render there —
   // it would deactivate a pre-existing interest.
-  const [added, setAdded] = useState<{ domain: string; created: boolean } | null>(null);
+  const [added, setAdded] = useState<AddedTopic | null>(null);
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
   const [undoing, setUndoing] = useState(false);
 
@@ -338,11 +339,11 @@ export function AddATopicFeature({
       });
       if (!response.ok) throw new Error('add failed');
       const body = (await response.json().catch(() => null)) as
-        | { domain?: string; created?: boolean }
+        | { domain?: string; created?: boolean; restored?: boolean }
         | null;
       // Prefer the canonical domain the server persisted over our local label.
       const domain = typeof body?.domain === 'string' && body.domain ? body.domain : territory.domain;
-      setAdded({ domain, created: body?.created === true });
+      setAdded({ domain, created: body?.created === true, restored: body?.restored === true });
       setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
       return true;
     } catch {
@@ -396,11 +397,7 @@ export function AddATopicFeature({
       supporting={
         added ? (
           <>
-            {added.created ? (
-              <>Added &ldquo;{added.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
-            ) : (
-              <>&ldquo;{added.domain}&rdquo; is already in your topics.</>
-            )}
+            {addedTopicMessage(added)}
             {added.created ? (
               <>
                 {' '}

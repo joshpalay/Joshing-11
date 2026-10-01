@@ -1201,8 +1201,11 @@ export function PeakDetailCard({
                 }}
               >
                 <p className="text-sm text-[var(--brand-ink)]">
-                  This can’t be undone. <strong>{node.name}</strong> comes off your map and out of
-                  your rotation.
+                  {/* Removal writes a subcategory exclusion and keeps the points;
+                      re-adding the topic lifts it (QA 2026-10-01, S6) — so this
+                      used to say "can't be undone" and that wasn't true. */}
+                  <strong>{node.name}</strong> comes off your map and out of your rotation. Your
+                  points are kept — add it again any time to bring it back.
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button

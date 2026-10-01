@@ -233,6 +233,9 @@ export async function POST(request: NextRequest) {
         .onConflictDoUpdate({
           target: gradeDisputes.answerId,
           set: {
+            // A later catch-up attempt on the same slot appeals a different
+            // answer (QA 2026-10-01, S2) — record what this appeal is about.
+            submittedAnswer: slot.catchup_submitted_answer ?? '',
             canonicalAnswer,
             questionText: slot.question_text,
             surface: 'daily_catchup',

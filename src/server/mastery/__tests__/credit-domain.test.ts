@@ -8,7 +8,11 @@ vi.mock('@/server/db/queries/knowledge-graph', () => ({
 vi.mock('@/server/activity/invite-onboarding', () => ({ maybeNotifyInviterOfFirstFive: vi.fn() }));
 vi.mock('@/server/db/queries/trust-promotion', () => ({ evaluateQuestionTrustOnPlay: vi.fn() }));
 
-import { resolveCreditDomain, type CreditDomainDeps } from '@/server/mastery/write-mastery-event';
+import {
+  resolveCreditDomain,
+  resolveTerritoryBroadCategory,
+  type CreditDomainDeps,
+} from '@/server/mastery/write-mastery-event';
 
 // "shakespearean tragedy" > "hamlet"; "literature" > "shakespearean tragedy".
 const EDGES: Record<string, string[]> = {
@@ -78,5 +82,23 @@ describe('resolveCreditDomain', () => {
       'Shakespearean Tragedy',
     );
     warn.mockRestore();
+  });
+});
+
+describe('resolveTerritoryBroadCategory (QA 2026-10-01, S5)', () => {
+  it('keeps the bucket a territory already has', () => {
+    expect(resolveTerritoryBroadCategory('History', 'General Knowledge')).toBe('History');
+    expect(resolveTerritoryBroadCategory('Pop Culture', 'Video Games')).toBe('Pop Culture');
+    expect(resolveTerritoryBroadCategory('History', null)).toBe('History');
+  });
+
+  it('fills an empty or catch-all bucket from the answered question', () => {
+    expect(resolveTerritoryBroadCategory(null, 'History')).toBe('History');
+    expect(resolveTerritoryBroadCategory('General Knowledge', 'History')).toBe('History');
+  });
+
+  it('stays catch-all when nothing better is offered', () => {
+    expect(resolveTerritoryBroadCategory('General Knowledge', null)).toBe('General Knowledge');
+    expect(resolveTerritoryBroadCategory(null, null)).toBeNull();
   });
 });
