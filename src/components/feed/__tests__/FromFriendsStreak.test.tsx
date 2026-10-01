@@ -120,7 +120,7 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
     // longer answerable but it IS forwardable), only the fresh one is playable.
     expect(html).toContain('Question done');
     expect(html).toContain('Answered correctly');
-    expect(html).toContain('Send onward');
+    expect(html).toContain('Send to a friend');
     expect(html).toContain('Question fresh');
     expect(answerCardCount(html)).toBe(1);
   });
@@ -134,7 +134,7 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
     // A miss stays visible (spent) and forwardable, only the fresh one is still answerable.
     expect(html).toContain('Not this time');
     expect(html).toContain('Question missed');
-    expect(html).toContain('Send onward');
+    expect(html).toContain('Send to a friend');
     expect(answerCardCount(html)).toBe(1);
   });
 
@@ -150,7 +150,7 @@ describe('FromFriendsStreak — answered questions resolve in place (Phase 2)', 
     expect(html).toContain('Question a');
     expect(html).toContain('Question b');
     expect(html).toContain('Answered correctly');
-    expect(html).toContain('Send onward');
+    expect(html).toContain('Send to a friend');
     // None are answerable any more.
     expect(answerCardCount(html)).toBe(0);
   });

@@ -82,6 +82,11 @@ If you think one hurts the experience, list it under "Questions for Josh" with y
 - Some topics have thin question banks on purpose (questions are generated on demand). Don't suggest "add more content" as a fix.
 - The daily summary shows every question as a full card on purpose. Don't propose collapsing it.
 - Developer tools are admin-only. If A can't see them, that's expected.
+- The send airplane on Lately / Activity cards only appears on questions you already know (answered right or wrong, or wrote). No airplane on an unplayed card is intended (Josh, 2026-10-01).
+- A question you WROTE counts as known, so its answer and airplane show on "<friend> answered your question" cards (2026-10-01).
+- "Text it" goes through your phone's own Messages app (you pick the person there), not Joshing's own texts. On a computer it copies the text instead (2026-10-01).
+- Right after answering a From Friends question wrong, "Text it" can go out without the answer until the page is reloaded. Accepted (2026-10-01).
+- Still owed: a real-phone check of "Text it" on iPhone and on Android. Browser automation can't open Messages, so list it under "Questions for Josh" until he confirms it.
 
 ### Test areas: go deep on each; don't skim
 
@@ -106,6 +111,12 @@ If you think one hurts the experience, list it under "Questions for Josh" with y
 - Missed-question returns and catch-up: check the "From …" labels against the real day, and note any point discounts.
 - Weekly ceremony, if reachable: date range vs. "Seven days", and what "mastered" actually means.
 - The "Lately" feed and the daily summary.
+- Answers and the send airplane on Lately / Activity / From Friends cards:
+  - Open every kind of question card you can find ("<friend> answered your question", "You came through on …", "You and <friend> keep landing in the same place", niche-match, a played From Friends card). On a question A has already answered (right or wrong) or wrote, the answer shows under it with an "ANSWER" label.
+  - On a question A has NOT played, there is no answer and no airplane. Any answer or airplane on an unplayed question is a Critical spoiler bug.
+  - Tap the airplane: a menu offers "Send in Joshing" and "Text it". "Send in Joshing" opens the friend picker, and the question it sends must NOT carry the answer. Check B's received copy.
+  - "Text it": in a desktop browser it copies the text and shows "Copied — paste it in a text ✓". Paste it somewhere and record it exactly: "Did you know?", the question, the answer, then "Play on Joshing: <link>". With a phone user agent it tries to open Messages (an `sms:` link). Don't follow it out of the page; just note that it fired.
+  - Answer a From Friends question WRONG, then text it before reloading. The text may have no answer (see deliberate decisions). Reload and confirm the answer is then included.
 
 **3. Friend system (starting from the baseline)**
 Do these in order, and screenshot both A's and B's view after each step:

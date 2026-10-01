@@ -1,12 +1,12 @@
 'use client';
 
-import { ChevronDown, Send } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
-import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
+import { SendOnwardMenu } from '@/components/SendOnwardMenu';
 import type {
   StreamExpand,
   StreamItem,
@@ -867,11 +867,10 @@ export function ConvergenceExpansion({
 }: {
   expand: Extract<StreamExpand, { kind: 'same_correct' }>;
 }) {
-  // Per-question share affordance: the open drawer is keyed by questionId so
-  // each quote in the cluster carries its own Send glyph. The category and
-  // authorship labels are intentionally omitted here — the headline already
-  // names the cluster's domains, so each quote reads clean with just its share.
-  const [sendQuestionId, setSendQuestionId] = useState<string | null>(null);
+  // Per-question share affordance: each quote in the cluster carries its own
+  // Send glyph. The category and authorship labels are intentionally omitted
+  // here — the headline already names the cluster's domains, so each quote reads
+  // clean with its answer and its share.
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -889,27 +888,21 @@ export function ConvergenceExpansion({
     >
       {expand.questions.map((q) => (
         <div key={q.questionId} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <p style={{ ...REVEALED_QUESTION_STYLE, flex: 1, minWidth: 0 }}>{q.text}</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={REVEALED_QUESTION_STYLE}>{q.text}</p>
+            {q.correctAnswer ? <RevealedAnswerLine answer={q.correctAnswer} /> : null}
+          </div>
           {/* Quiet, icon-only share affordance per quote — the paper-plane Send
-              glyph, matching the homepage share treatment. Opens the same
-              SendQuestionDrawer. */}
-          <button
-            type="button"
-            onClick={() => setSendQuestionId(q.questionId)}
-            aria-label="Send to a friend"
-            style={{ ...SEND_BUTTON_STYLE, marginTop: -11 }}
-          >
-            <Send size={15} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <SendQuestionDrawer
-            isOpen={sendQuestionId === q.questionId}
-            onClose={() => setSendQuestionId(null)}
-            question={{
-              id: q.questionId,
-              text: q.text,
-              domain: q.domain ?? '',
-            }}
-          />
+              glyph, matching the homepage share treatment. It opens the
+              Send-in-Joshing / Text-it menu, and only on a question the viewer
+              knows (build-stream attaches the answer for exactly those). */}
+          {q.correctAnswer ? (
+            <SendOnwardMenu
+              question={{ id: q.questionId, text: q.text, domain: q.domain ?? '' }}
+              answer={q.correctAnswer}
+              buttonStyle={{ ...SEND_BUTTON_STYLE, marginTop: -11 }}
+            />
+          ) : null}
         </div>
       ))}
     </div>
@@ -921,7 +914,6 @@ function SendOnwardExpansion({
 }: {
   expand: Extract<StreamExpand, { kind: 'your_question' | 'niche_match' }>;
 }) {
-  const [sendOpen, setSendOpen] = useState(false);
   const question: StreamQuestion = expand.question;
 
   return (
@@ -937,6 +929,7 @@ function SendOnwardExpansion({
       }}
     >
       <p style={REVEALED_QUESTION_STYLE}>{question.text}</p>
+      {question.correctAnswer ? <RevealedAnswerLine answer={question.correctAnswer} /> : null}
 
       {/* B-13.3: one footer line — the byline left, the Send glyph right —
           instead of a lone icon on its own row beneath a gap. Honest authorship
@@ -959,15 +952,16 @@ function SendOnwardExpansion({
         )}
         {/* Quiet, icon-only share affordance — no oversized labeled button.
             Send (paper plane) is the homepage's share glyph by request; the
-            knowledge surfaces still use Share2. Opens the same SendQuestionDrawer. */}
-        <button
-          type="button"
-          onClick={() => setSendOpen(true)}
-          aria-label="Send to a friend"
-          style={SEND_BUTTON_STYLE}
-        >
-          <Send size={15} strokeWidth={1.8} aria-hidden="true" />
-        </button>
+            knowledge surfaces still use Share2. Opens the Send-in-Joshing /
+            Text-it menu — only when the viewer knows this question (answered or
+            wrote it); an unplayed question gets no plane. */}
+        {question.correctAnswer ? (
+          <SendOnwardMenu
+            question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
+            answer={question.correctAnswer}
+            buttonStyle={SEND_BUTTON_STYLE}
+          />
+        ) : null}
       </div>
 
       {expand.kind === 'niche_match' && expand.strangerId ? (
@@ -990,16 +984,32 @@ function SendOnwardExpansion({
           </Link>
         </div>
       ) : null}
-
-      <SendQuestionDrawer
-        isOpen={sendOpen}
-        onClose={() => setSendOpen(false)}
-        question={{
-          id: question.questionId,
-          text: question.text,
-          domain: question.domain ?? '',
-        }}
-      />
     </div>
+  );
+}
+
+// The answer read-back under a revealed question the viewer already knows —
+// same mono label + quiet value shape as the From Friends cards' AnswerLine.
+function RevealedAnswerLine({ answer }: { answer: string }) {
+  return (
+    <p style={{ margin: '8px 0 0' }}>
+      <span
+        style={{
+          display: 'block',
+          fontFamily: FM,
+          fontSize: 10,
+          letterSpacing: '0.11em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          color: INK3,
+          marginBottom: 3,
+        }}
+      >
+        Answer
+      </span>
+      <span style={{ fontFamily: 'var(--font-serif)', fontSize: 16, lineHeight: 1.4, color: INK2 }}>
+        {answer}
+      </span>
+    </p>
   );
 }

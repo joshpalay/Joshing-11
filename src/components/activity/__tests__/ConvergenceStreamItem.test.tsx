@@ -127,11 +127,18 @@ describe('ActivityStreamItem — collapsed convergence one-liner', () => {
 });
 
 describe('ConvergenceExpansion — the streamlined reveal (commit 151b5a1)', () => {
-  it('shows the 3 co-correct questions as clean quotes, each with a per-quote share glyph', () => {
+  it('shows the 3 co-correct questions as clean quotes, each with its answer and a per-quote share glyph', () => {
     const item = build();
     if (item.expand?.kind !== 'same_correct') throw new Error('expected same_correct');
-    const expand = item.expand as Extract<StreamExpand, { kind: 'same_correct' }>;
+    const built = item.expand as Extract<StreamExpand, { kind: 'same_correct' }>;
+    // build-stream attaches the answers for questions the viewer knows.
+    const expand = {
+      ...built,
+      questions: built.questions.map((q, i) => ({ ...q, correctAnswer: ['Picasso', 'Ulaanbaatar', 'Stravinsky'][i] })),
+    };
     const html = renderToStaticMarkup(<ConvergenceExpansion expand={expand} />);
+    expect(html).toContain('Picasso');
+    expect(html).toContain('Ulaanbaatar');
 
     // All three questions revealed.
     expect(html).toContain('Who painted Guernica?');
@@ -146,6 +153,18 @@ describe('ConvergenceExpansion — the streamlined reveal (commit 151b5a1)', () 
     expect(html).toContain('Send to a friend');
     expect(html).not.toContain('SEND IT ONWARD');
     expect(html).not.toContain('DISCOVER');
+  });
+
+  it('shows no answer and no share glyph on a question the viewer does not know', () => {
+    const item = build();
+    if (item.expand?.kind !== 'same_correct') throw new Error('expected same_correct');
+    const expand = item.expand as Extract<StreamExpand, { kind: 'same_correct' }>;
+    const html = renderToStaticMarkup(
+      <ConvergenceExpansion expand={{ ...expand, questions: expand.questions.map((q) => ({ ...q, correctAnswer: null })) }} />,
+    );
+    expect(html).toContain('Who painted Guernica?');
+    expect(html).not.toContain('Send to a friend');
+    expect(html).not.toContain('Answer');
   });
 
   it('omits authorship labels entirely — no author is claimed, so nothing is mis-attributed (§4)', () => {

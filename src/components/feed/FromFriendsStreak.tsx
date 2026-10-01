@@ -1,9 +1,8 @@
 'use client';
 
-import { Send } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { SendQuestionDrawer } from '@/components/SendQuestionDrawer';
+import { SendOnwardMenu } from '@/components/SendOnwardMenu';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
 import {
   ActorLink,
@@ -347,9 +346,6 @@ function StreakQuestionCard({
       }
     })();
   }
-  // Forwarding a settled question: the "Send onward" affordance opens the same
-  // SendQuestionDrawer the convergence / your-question reveals use.
-  const [sendOpen, setSendOpen] = useState(false);
 
   const category = question.domain?.trim() || null;
   const hasProvenance = questionProvenance(question) !== null;
@@ -440,15 +436,18 @@ function StreakQuestionCard({
             marginBottom={10}
             left={<SpentResult resolution={resolution} priorResult={question.priorResult} />}
             right={
-              <FeedActionLink
-                size="sm"
-                className="no-underline"
-                onClick={() => setSendOpen(true)}
-                aria-label="Send onward"
-                title="Send onward"
-              >
-                <Send className="size-4" aria-hidden="true" />
-              </FeedActionLink>
+              // Send in Joshing / Text it. A correct in-session answer IS the
+              // answer; a wrong one leaves only the server's read-back (absent
+              // until reload), so the text may go without it.
+              <SendOnwardMenu
+                question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
+                answer={
+                  question.correctAnswer ??
+                  (resolution?.isCorrect ? resolution.submitted : null)
+                }
+                iconSize={16}
+                buttonClassName="inline-flex min-h-11 min-w-11 items-center justify-end text-[color:var(--brand-link)] transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              />
             }
           />
         ) : null}
@@ -521,11 +520,6 @@ function StreakQuestionCard({
         )}
       </div>
       {spent ? null : answer.sheets}
-      <SendQuestionDrawer
-        isOpen={sendOpen}
-        onClose={() => setSendOpen(false)}
-        question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
-      />
     </>
   );
 }

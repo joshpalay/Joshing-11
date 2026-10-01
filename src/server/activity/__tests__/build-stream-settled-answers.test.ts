@@ -55,6 +55,7 @@ vi.mock('@/server/db/queries/lately', () => ({
   ),
   getViewerPriorAnswerResults: getViewerPriorAnswerResultsMock,
   getCorrectAnswersForSettledQuestions: getCorrectAnswersForSettledQuestionsMock,
+  getAnswersKnownToViewer: async () => new Map<string, string>(),
   getViewerDismissedMilestoneIds: vi.fn(async () => new Set<string>()),
 }));
 
