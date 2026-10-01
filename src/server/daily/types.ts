@@ -199,6 +199,17 @@ export const DAILY_QUEUE_MIN_SIZE = 3;
 export const DAILY_QUEUE_MAX_PER_SUBCATEGORY = 2;
 
 /**
+ * Most house (Joshing-authored) picks a Daily Five's core may hold. House picks
+ * claim core slots BEFORE generation runs, so without this limit a deep house
+ * bank in one area the player merely drifted into took two slots every day —
+ * prod 2026-09-27→10-01 (Chiann): Beethoven house questions held 8 of 25 core
+ * slots while areas she had just added were never reached. Picks past the limit
+ * go to the house reserve, so they still backfill a queue that would otherwise
+ * come up short.
+ */
+export const DAILY_QUEUE_MAX_HOUSE_PICKS = 1;
+
+/**
  * Daily Five +2 — up to this many bonus slots are appended after the core
  * DAILY_QUEUE_SIZE, each a freshly generated accessible question in a domain
  * drawn from the territory ∪ activity of people the viewer follows (D-4 §B; see

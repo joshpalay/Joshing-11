@@ -53,6 +53,7 @@ import {
 } from '@/server/adaptive-difficulty';
 import {
   DAILY_BONUS_SLOT_MAX,
+  DAILY_QUEUE_MAX_HOUSE_PICKS,
   DAILY_QUEUE_MAX_PER_SUBCATEGORY,
   DAILY_QUEUE_MIN_SIZE,
   DAILY_QUEUE_SIZE,
@@ -602,7 +603,7 @@ async function buildDailyQueueForUser(
   type ReserveDeflection = {
     source: 'authored' | 'house' | 'generated';
     subcategory: string;
-    reason: 'answer_cooldown' | 'subject_cooldown' | 'diversity_cap';
+    reason: 'answer_cooldown' | 'subject_cooldown' | 'diversity_cap' | 'house_cap';
   };
   const reserveDeflections: ReserveDeflection[] = [];
 
@@ -680,6 +681,7 @@ async function buildDailyQueueForUser(
     await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, allowedSubcategories)
   ).filter(notHiddenCanonical);
   const houseReserve: typeof housePicksAll = [];
+  let houseAdmitted = 0;
   const housePicks = housePicksAll.filter((pick) => {
     if (answerCooldownGate.blocks(pick.answerText)) {
       deflectedForAnswerCooldown += 1;
@@ -699,6 +701,18 @@ async function buildDailyQueueForUser(
       });
       return false;
     }
+    // House limit (DAILY_QUEUE_MAX_HOUSE_PICKS): checked before the diversity
+    // gate so an over-limit pick doesn't use up its area's diversity count.
+    // Reserved like a diversity deflection, so it only returns via backfill.
+    if (houseAdmitted >= DAILY_QUEUE_MAX_HOUSE_PICKS) {
+      houseReserve.push(pick);
+      reserveDeflections.push({
+        source: 'house',
+        subcategory: pick.canonicalSubcategory ?? '',
+        reason: 'house_cap',
+      });
+      return false;
+    }
     if (!diversityGate.admit(pick.canonicalSubcategory)) {
       houseReserve.push(pick);
       reserveDeflections.push({
@@ -710,6 +724,7 @@ async function buildDailyQueueForUser(
     }
     answerCooldownGate.record(pick.answerText);
     subjectCooldownGate.record(pick.subjectEntity, pick.answerText);
+    houseAdmitted += 1;
     return true;
   });
 

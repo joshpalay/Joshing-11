@@ -441,6 +441,44 @@ describe('fillDailyQueueForUser — intra-day diversity cap', () => {
     expect(houseSlots[0]?.question_id).toBe('h1');
   });
 
+  it('lets at most one house pick into the core when generation can fill the rest (prod 2026-10-01, Chiann)', async () => {
+    // A deep Beethoven house bank took 2 core slots a day, every day, ahead of
+    // generation for the player's newly added areas. One house pick per Five.
+    mocks.pickHouseQuestions.mockResolvedValue([
+      houseQuestion('h1', 'Beethoven'),
+      houseQuestion('h2', 'Beethoven'),
+      houseQuestion('h3', 'Botany'),
+    ]);
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([
+      genq('g1', 'Kafka'),
+      genq('g2', 'Disney Movies'),
+      genq('g3', '1980s Cartoons'),
+      genq('g4', 'Modern Art'),
+    ]);
+
+    await fillDailyQueueForUser(USER);
+
+    const houseSlots = persistedSlots().filter((slot) => slot.source === 'house');
+    expect(houseSlots.map((slot) => slot.question_id)).toEqual(['h1']);
+    expect(persistedBotSlots()).toHaveLength(DAILY_QUEUE_SIZE - 1);
+  });
+
+  it('still backfills over-limit house picks when the queue would otherwise come up short', async () => {
+    mocks.pickHouseQuestions.mockResolvedValue([
+      houseQuestion('h1', 'Beethoven'),
+      houseQuestion('h2', 'Botany'),
+      houseQuestion('h3', 'Hamlet'),
+    ]);
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue([]);
+
+    await fillDailyQueueForUser(USER);
+
+    const houseIds = persistedSlots()
+      .filter((slot) => slot.source === 'house')
+      .map((slot) => slot.question_id);
+    expect(houseIds).toEqual(expect.arrayContaining(['h1', 'h2', 'h3']));
+  });
+
   it('logs the per-domain, per-reason deflection trail whenever a pick is held back', async () => {
     // The exact diagnostic gap the 2026-08-30 incident hit: the aggregate
     // deflectedFor* counters only ever reached a log line when the build fell
