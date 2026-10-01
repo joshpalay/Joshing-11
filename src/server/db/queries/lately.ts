@@ -782,6 +782,32 @@ export async function getCorrectAnswersForSettledQuestions(
   return out;
 }
 
+/**
+ * Canonical answers for the subset of `ids` the viewer already KNOWS — they
+ * attempted it (right or wrong; any answeredByUserId=viewer mastery event) or
+ * they wrote it. Questions the viewer has never played are simply absent, so
+ * this is safe to call with a mixed set: it does its own settle-narrowing.
+ *
+ * Feeds the read-only Lately reveals (your-question / niche-match / convergence)
+ * so the answer reads under the question and the send-onward text can carry it.
+ * A card whose question is absent here is "unplayed" and gets no send glyph.
+ */
+export async function getAnswersKnownToViewer(
+  userId: string,
+  ids: string[],
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const [prior, authored] = await Promise.all([
+    getViewerPriorAnswerResults(userId, ids),
+    db
+      .select({ id: questions.id })
+      .from(questions)
+      .where(and(inArray(questions.id, ids), eq(questions.creatorId, userId))),
+  ]);
+  const known = [...new Set([...prior.keys(), ...authored.map((r) => r.id)])];
+  return getCorrectAnswersForSettledQuestions(known);
+}
+
 // The viewer's own prior result on each of the given questions, if any. Drives
 // the milestone expansion's progress on first render AND the cross-session lock:
 // a single attempt (right OR wrong) settles the question, so it must report

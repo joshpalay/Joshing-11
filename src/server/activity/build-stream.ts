@@ -31,6 +31,7 @@ import {
   getLatelyConvergences,
   getLatelyMoments,
   getMilestoneQuestionText,
+  getAnswersKnownToViewer,
   getViewerDismissedMilestoneIds,
   getCorrectAnswersForSettledQuestions,
   getViewerPriorAnswerResults,
@@ -235,13 +236,13 @@ export async function buildActivityStream(
     return convergenceToStreamItem(c, questions, convergenceCaptionTemplate(c.id, sharedTopic), sharedTopic);
   });
 
-  const all = [
+  const all = await attachKnownAnswers(userId, [
     ...momentItems,
     ...bundleAnswerItems,
     ...friendActivityItems,
     ...convergenceItems,
     ...utilityItems,
-  ];
+  ]);
 
   // Blocks are enforced bidirectionally on every read (user-blocks.ts). Activity
   // rows are already filtered at the query, but moments, bundles and
@@ -273,6 +274,39 @@ export async function buildActivityStream(
         : item,
     );
   return sortByProminence(visible);
+}
+
+// The read-only reveals (your-question, niche-match, convergence) show the
+// answer under the question and let the viewer text it onward — but only for
+// questions the viewer already knows (answered or wrote). Anything else gets
+// `correctAnswer: null`, which also hides the send glyph on that reveal: no
+// spoilers, and no forwarding a question you haven't played. Milestone bundles
+// are left alone; they already carry their own settle-gated answers.
+async function attachKnownAnswers(userId: string, items: StreamItem[]): Promise<StreamItem[]> {
+  const revealQuestions = (item: StreamItem): StreamQuestion[] => {
+    const expand = item.expand;
+    if (!expand) return [];
+    if (expand.kind === 'same_correct') return expand.questions;
+    if (expand.kind === 'your_question' || expand.kind === 'niche_match') return [expand.question];
+    return [];
+  };
+  const ids = [...new Set(items.flatMap(revealQuestions).map((q) => q.questionId))];
+  const answers = await getAnswersKnownToViewer(userId, ids);
+  const withAnswer = (q: StreamQuestion): StreamQuestion => ({
+    ...q,
+    correctAnswer: answers.get(q.questionId) ?? null,
+  });
+  return items.map((item) => {
+    const expand = item.expand;
+    if (!expand) return item;
+    if (expand.kind === 'same_correct') {
+      return { ...item, expand: { ...expand, questions: expand.questions.map(withAnswer) } };
+    }
+    if (expand.kind === 'your_question' || expand.kind === 'niche_match') {
+      return { ...item, expand: { ...expand, question: withAnswer(expand.question) } };
+    }
+    return item;
+  });
 }
 
 // Every person a stream row is about: its owning friend and any actor link in
