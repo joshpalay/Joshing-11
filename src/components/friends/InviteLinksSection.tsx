@@ -17,7 +17,7 @@ import {
   type InviteLinkCategory,
 } from '@/lib/invite-links';
 
-const SHARE_TEXT = "I'm playing Joshing — come be my friend.";
+const SHARE_TEXT = "I thought we could team up on Joshing, the trivia game. IT'S ON!";
 
 export type InviteLinkTopic = InviteLinkCategory;
 
