@@ -280,7 +280,7 @@ export async function saveDeclaredInterests(userId: string, interests: DeclaredI
 export async function addDeclaredInterest(
   userId: string,
   input: DeclaredInterestInput,
-): Promise<{ created: boolean; domain: string; broadCategory: string | null }> {
+): Promise<{ created: boolean; restored: boolean; domain: string; broadCategory: string | null }> {
   const clean = normalizeDeclaredInterest(input);
   if (!clean) {
     throw new Error('Enter a topic name.');
@@ -309,8 +309,11 @@ export async function addDeclaredInterest(
   // daily-summary "don't ask") excluded: clear any matching subcategory-scope
   // exclusion so the domain returns to rotation and the knowledge surfaces.
   // Mirrors the refine add path's exclusion delete.
-  const clearSubcategoryExclusion = async (label: string) => {
-    await db
+  // Returns whether an exclusion was lifted — i.e. the add brought a removed
+  // topic (and the points it kept) back, which the client says out loud instead
+  // of "already in your topics" (QA 2026-10-01, S6).
+  const clearSubcategoryExclusion = async (label: string): Promise<boolean> => {
+    const lifted = await db
       .delete(userDomainExclusions)
       .where(
         and(
@@ -318,14 +321,16 @@ export async function addDeclaredInterest(
           eq(userDomainExclusions.scope, 'subcategory'),
           sql`lower(${userDomainExclusions.canonicalSubcategory}) = ${label.toLowerCase()}`,
         ),
-      );
+      )
+      .returning({ id: userDomainExclusions.id });
+    return lifted.length > 0;
   };
 
   const key = clean.label.toLowerCase();
   const existing = active.find((row) => row.domain.toLowerCase() === key);
   if (existing) {
-    await clearSubcategoryExclusion(existing.domain);
-    return { created: false, domain: existing.domain, broadCategory: existing.broadCategory };
+    const restored = await clearSubcategoryExclusion(existing.domain);
+    return { created: false, restored, domain: existing.domain, broadCategory: existing.broadCategory };
   }
 
   if (active.length >= MAX_ACTIVE_DECLARED_INTERESTS) {
@@ -339,9 +344,9 @@ export async function addDeclaredInterest(
   await db.transaction(async (tx) => {
     await upsertDeclaredInterestRow(tx, userId, interest);
   });
-  await clearSubcategoryExclusion(interest.label);
+  const restored = await clearSubcategoryExclusion(interest.label);
 
-  return { created: true, domain: interest.label, broadCategory: interest.broadCategory ?? null };
+  return { created: true, restored, domain: interest.label, broadCategory: interest.broadCategory ?? null };
 }
 
 // Undo for the incremental add path (addDeclaredInterest): deactivate one

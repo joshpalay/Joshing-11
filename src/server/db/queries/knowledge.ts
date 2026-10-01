@@ -741,6 +741,12 @@ export async function getUserMasteryOverview(
  * across PLAYER_MASTERY and DeclaredInterest for the same domain wins.
  * Read-time only; nothing is written.
  */
+// A real bucket, not empty and not the "General Knowledge" catch-all.
+function isSpecificBroadCategory(category: string | null | undefined): category is string {
+  const normalized = normalizeBroadCategory(category);
+  return Boolean(normalized) && normalized !== 'General Knowledge';
+}
+
 async function fillMissingBroadCategories(
   domains: Map<string, { domain: string; broadCategory: string | null }>,
 ): Promise<void> {
@@ -833,7 +839,14 @@ export async function getKnowledgePageData(
     const isDemonstrated = existing?.isDemonstrated ?? false;
     knowledgeDomainNames.set(key, {
       domain: existing?.domain ?? domain,
-      broadCategory: existing?.broadCategory ?? row.broadCategory,
+      // The category the player's own topic carries wins over the mastery row's.
+      // PLAYER_MASTERY.broad_category is copied from whichever question was last
+      // answered, so one stray question re-filed a topic under the player
+      // (Renaissance Florence: History → "General Knowledge" → another player's
+      // "Art & Architecture"; QA 2026-10-01, S5).
+      broadCategory: isSpecificBroadCategory(row.broadCategory)
+        ? row.broadCategory
+        : existing?.broadCategory ?? row.broadCategory,
       isDeclared: true,
       isDemonstrated,
       territoryType: isDemonstrated ? 'demonstrated' : (row.territoryType ?? 'declared'),

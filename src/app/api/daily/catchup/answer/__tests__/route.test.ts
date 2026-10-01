@@ -377,6 +377,39 @@ describe('POST /api/daily/catchup/answer mastery scoring (F2.2)', () => {
     )
     expect(createFeedItemsForFriendsFromAnswerMock).not.toHaveBeenCalled()
   })
+
+  it('a fresh attempt clears the previous attempt’s appeal verdict (QA 2026-10-01, S2)', async () => {
+    selectCallChain.length = 0
+    selectCallChain.push(async () => [
+      {
+        ...QUEUE,
+        slots: [
+          {
+            ...QUEUE.slots[0],
+            answered: true,
+            answer_state: 'incorrect',
+            catchup_answer_state: 'incorrect',
+            catchup_submitted_answer: 'older try',
+            catchup_answered_at: '2026-09-29T00:00:00.000Z',
+            catchup_recheck_status: 'rejected',
+            catchup_recheck_reason: 'Still not it.',
+          },
+        ],
+      },
+    ])
+    selectCallChain.push(async () => [PERSISTED_QUESTION])
+    const setSpy = vi.fn(() => ({ where: vi.fn(async () => undefined) }))
+    dbMock.update.mockImplementationOnce(() => ({ set: setSpy }) as never)
+    gradeAnswerMock.mockResolvedValueOnce({ result: 'wrong', consolation: null })
+
+    await POST(jsonRequest(VALID_BODY) as never)
+
+    const [{ slots }] = setSpy.mock.calls[0] as unknown as [{ slots: Record<string, unknown>[] }]
+    expect(slots[0].catchup_submitted_answer).toBe('A')
+    expect(slots[0].catchup_answer_state).toBe('incorrect')
+    expect(slots[0].catchup_recheck_status).toBeUndefined()
+    expect(slots[0].catchup_recheck_reason).toBeUndefined()
+  })
 })
 
 describe('POST /api/daily/catchup/answer — questionType reaches the grader (B-GRADE-TYPE-01)', () => {

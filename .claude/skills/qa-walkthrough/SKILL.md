@@ -1,6 +1,6 @@
 ---
 name: qa-walkthrough
-description: Full exploratory QA walkthrough of the live Joshing app in Chrome (auth, gameplay, friends, knowledge, invites), judged against Joshing's product principles, ending with a self-contained HTML + PDF report and deletion of test accounts B and C. Only run when the user types /qa-walkthrough.
+description: Full exploratory QA walkthrough of the live Joshing app at phone size (auth, gameplay, friends, knowledge, invites, design system), judged against Joshing's product principles, ending with a self-contained HTML + PDF report and deletion of test accounts B and C. Only run when the user types /qa-walkthrough.
 argument-hint: (optional) extra focus or notes for this run, e.g. "re-check PR #1713 blocking fixes"
 disable-model-invocation: true
 ---
@@ -10,14 +10,22 @@ disable-model-invocation: true
 Extra focus for this run (may be empty): $ARGUMENTS
 
 ## Before you start
-- Load the claude-in-chrome skill and its browser tools (one ToolSearch call), then call tabs_context_mcp and open a NEW tab.
+- **Ask for approvals in ONE question, up front** (safety checks block irreversible actions mid-run otherwise): (a) delete accounts B and C at the end; (b) if C already exists, delete it first so it can sign up fresh; (c) if A is at the 3-invite-link cap, delete one link so "A creates a link" can be tested. Only do what was approved; mark the rest UNTESTED.
+- **Browser: use the Playwright harness in `scripts/qa/`.** Chrome via claude-in-chrome can't resize to phone width on this machine and its tab runs hidden and throttled (three runs in a row). The harness runs three headless 390×844 iPhone-style browsers, one per account, all signed in at once, and logs console errors, 4xx/5xx responses and dialogs per account.
+  - Set `QA_DIR` to a folder in the session scratchpad (the profiles hold live session cookies, so never put them in the repo), then start `node scripts/qa/server.cjs` in the background for the whole session.
+  - Drive an account with `bash scripts/qa/run.sh <A|B|C>` and a JS snippet on stdin (quoted heredoc). Helpers: `h.go`, `h.text`, `h.shot(id, caption, {full})`, `h.click`, `h.api`, `h.login(phone)`, `h.log(msg)` (goes to the timeline), plus `answer()`, `btns()`, `dots()` and `designAudit()` from `scripts/qa/lib.js`. Use the real login screen once per account for coverage, and `h.login` after that.
+  - Many buttons have an aria-label that differs from their text (Decline is "Decline friend request from X", topic circles are "View <topic> details", frequency options are `role=radio`). If a click times out, look up the real label before retrying.
+  - Desktop pass: `node scripts/qa/desktop.cjs` (reuses A's session at 1280×800).
+  - Confirm causes with read-only queries: `node scripts/qa/ro-query.cjs` (every statement runs inside `BEGIN READ ONLY`).
+  - Stop the server at the end.
 - Target: https://joshing-11.vercel.app (production). Browser automation against localhost is blocked, so do not test a local dev server.
-- Save outputs to `docs/reports/` in this repo as `YYYY-MM-DD-joshing-qa-report.html` and `YYYY-MM-DD-joshing-qa-report.pdf` (today's date). Make the PDF from the HTML with Playwright (Edge headless silently fails here).
+- **Plan for the 1 PM ET round rollover.** Next-round effects (a new topic showing up, a Never topic staying out of the five, catch-up and bonuses, a blocked friend's bonus, a declared interest changing the questions) can only be seen after 1 PM ET. Either run across 1 PM, or finish the run and come back after 1 PM for a short "next round" pass before writing the report. Record the topic, level and time of every change so it can be matched.
+- Save outputs to `docs/reports/` in this repo as `YYYY-MM-DD-joshing-qa-report.html` and `YYYY-MM-DD-joshing-qa-report.pdf` (today's date). Write the report as a template and build it with `python scripts/qa/build-report.py <template> <out.html> --style-from <previous report>` (it embeds the screenshots and the timeline; see the script header). Make the PDF from the HTML with Playwright (Edge headless silently fails here).
 - If the browser tools fail 2–3 times in a row, stop and tell the user instead of looping.
 
 ## The brief
 
-You're testing Joshing, a social trivia app, in this Chrome tab. Do an exhaustive, systematic walkthrough and log everything: bugs, confusing UX, broken links, console errors, inconsistent copy, and anything that violates these product principles:
+You're testing Joshing, a social trivia app, in production. Do an exhaustive, systematic walkthrough and log everything: bugs, confusing UX, broken links, console errors, inconsistent copy, and anything that violates these product principles:
 - No streaks, leaderboards, or coercive mechanics (guilt, urgency, streak pressure).
 - Wrong answers should feel like connection moments, not failures.
 - Color alone never carries meaning; there's always a second cue (text, shape, icon).
@@ -28,7 +36,7 @@ You're testing Joshing, a social trivia app, in this Chrome tab. Do an exhaustiv
 - B (second, DELETE AT END): 5553333333. It may already exist from earlier testing. If it doesn't exist (a login shows "Joshing is invite-only"), create it by redeeming an invite from A, and treat that as extra fresh-signup coverage.
 - C (fresh signup, DELETE AT END): 5554444444. Joshing is invite-only, so C must join through an invite from A. If C already exists from a previous run, note that, then delete it first (see Final cleanup) so you can sign it up fresh.
 - If 5554444444 won't accept 000000 ("Unable to send code"), stop the C-dependent tests, mark them UNTESTED, and say so in the report.
-- Use separate Chrome windows so two accounts can be signed in at the same time.
+- The harness keeps A, B and C signed in at the same time in separate browser profiles.
 
 ### Viewport
 Joshing is used mostly on phones. Do the whole walkthrough at phone size (about 390×844). At the end, do one short pass at desktop width and note only what differs.
@@ -46,6 +54,17 @@ Put both the "as found" and the "baseline" states in the report.
 - Before rating anything Critical, reproduce it a second time from a known state. Note "reproduced 2/2" or "seen once."
 - Quote on-screen copy exactly, in quotes.
 - Check the browser console on every screen, and record errors with their time.
+- **Confirm the cause of every Should-fix and Critical finding before the report goes out.** Read the code path and, where useful, run a read-only DB query. Write what you confirmed under "Possible cause" with the file/line or query result; if you couldn't confirm it, say "unconfirmed guess". (On 2026-10-01, two of five first-draft causes turned out partly wrong.)
+
+### Re-check past fixes (do these during the matching area)
+Each was fixed after an earlier run. Confirm it still holds and say so in the report.
+- "Not now" on "Add <topic> to your topics?" does NOT add the topic (fixed after 2026-09-29).
+- A catch-up question appealed in an earlier attempt can be appealed again on a later attempt, with no "already been rechecked" (2026-10-01 S2).
+- A topic stays in the category the player chose. Check that A's Renaissance Florence shows under History and Final Fantasy under Pop Culture, before and after playing (2026-10-01 S5).
+- Removing a topic says the points are kept, and re-adding it says "… is back on your map — the points you'd earned are still there." (2026-10-01 S6).
+- After friend, then unfriend or block, then unblock, then friend again, the feed shows ONE "<name> is now a friend" row, and a former friend's activity ("played their first five questions") disappears once you're no longer friends (2026-10-01 S1).
+- "Never show this question" works (fixed after 2026-09-26).
+Add to this list whenever a run's findings get fixed.
 
 ### Known deliberate decisions: do NOT file these as bugs
 If you think one hurts the experience, list it under "Questions for Josh" with your reasoning instead.
@@ -97,7 +116,7 @@ Do these in order, and screenshot both A's and B's view after each step:
 5. A blocks B. Check every one of those surfaces again, on BOTH sides, including B's bonus questions ("from …'s world").
 6. While blocked, try every way to reconnect in both directions: request, invite-by-phone, invite link.
 7. A unblocks B. Are they friends again? (They should NOT be.)
-Also check: search rate limiting, mutual-friend suggestions (where they surface), friend profiles (overlap, shared knowledge by category), and whether any stranger's name or activity reaches a feed without consent.
+Also check: search rate limiting, mutual-friend suggestions (turn on "Suggest me through mutual friends" for B and C first: it's OFF by default, so suggestions never appear otherwise; then look on Find Friends), friend profiles (overlap, shared knowledge by category), and whether any stranger's name or activity reaches a feed without consent.
 
 **4. Knowledge / profile**
 - Profile page: knowledge portrait and category territory. Do the numbers add up (e.g. "+3 more" vs. "across N territories")?
@@ -108,19 +127,36 @@ Also check: search rate limiting, mutual-friend suggestions (where they surface)
   - Add a brand-new topic. Is there a confirmation? Does it show up on the profile, the knowledge page, and the setup screen? Does it show up in the next five?
   - Remove a topic. Is it gone everywhere, or does it linger (profile "building around…" line, knowledge map, invite-link topics, bonus questions)? Is there a way to undo, and is the copy clear about what removing does?
   - Re-add the topic you removed. Does its old progress come back or start from zero, and does the app say which?
-- Change how often a topic comes up (the frequency levels: Often → Sometimes → Blue moon → Resting). For each change:
+- Change how often a topic comes up (the frequency levels: Often → Sometimes → Blue Moon → Never; "Never" is the app's name for resting). For each change:
   - Move a topic between levels. Does it save, and does the change survive a page reload?
   - Does the new level show the same way everywhere it appears (setup screen, knowledge page, legends)? Can the levels be told apart without color?
-  - Set a topic to Resting. Does it stop appearing in the five, catch-up, missed-question returns and bonus questions?
+  - Set a topic to Never. Does it stop appearing in the five, catch-up, missed-question returns and bonus questions? (Needs the next round: see the 1 PM rollover note.)
   - Record the topic, the old and new level, and the time, so it can be matched against the next round.
 - Put A's topics and frequencies back to how they were at the start (note them in Step 0), and say in the report if anything wouldn't go back.
 
 **5. Invite system**
-- A creates an invite link.
+- A creates an invite link (needs a free slot: see the up-front approvals. If not approved, have B create one instead and say so).
 - Redeem it as C (fresh) and as B (existing, from the baseline). Does friendship form? Is there a confirmation?
 - Redeem as B while B is blocked by A.
 - Invalid, expired, and already-used links.
 - Co-invitee auto-friending: B and C both redeem the SAME link from A. Do B and C end up friends with each other? Record what happens.
+
+**6. Design system review** (every screen visited, at phone size and in the desktop pass)
+Judge against `_docs/DESIGN-SYSTEM.md` (the canon; if it and `globals.css` disagree, the CSS is right), `_docs/STYLE-GUIDE-TYPE.md` and `_docs/STYLE-GUIDE-COLOR.md`.
+- On each main screen (home, round, summary, catch-up, friends, profile, knowledge, setup, Lately, invite pages, login and onboarding), run `designAudit()` and take a screenshot. It flags:
+  - buttons or links side by side in a row whose tops, bottoms or heights differ (misaligned buttons)
+  - tap targets under the 44px touch floor
+  - text spilling out or truncated, and sideways page scroll
+  - controls hidden under the fixed header or nav
+  - fonts outside Josefin Sans / Cormorant Garamond / Montserrat
+  These are hints, not verdicts. Confirm each one on the screenshot (zoom in) before filing it, and don't file intentional inline text links (canon §3.7) as small targets.
+- Also look for, by eye:
+  - buttons that don't follow the button tree (primary / ghost / danger / icon / tab / list-row / inline text action / FAB): wrong height, radius, weight or color for their role, or two primary buttons on one screen
+  - cards, chips and badges that don't match their recipes (radius, border, shadow; chips have no shadow)
+  - uneven spacing between sibling elements, uneven gutters, things not lining up with the column edge
+  - overlap: floating panels, the FAB or toasts covering content
+  - color used off its job (grading colors used decoratively, category colors carrying meaning alone)
+- File each with the screen, the element (quoted text), what's off and by how much (px when you can measure), the canon rule it breaks (§ number), and a zoomed screenshot.
 
 For each area, note:
 - what worked
@@ -142,7 +178,7 @@ If a deletion fails or leaves traces, report it as a finding with times, and say
 A detailed report with these sections:
 1. Short overall summary.
 2. Starting state (as found) and baseline, with screenshots.
-3. One section per area. Screenshots sit next to the flow or state they show, each captioned with time, account, and URL.
+3. One section per area (including the design system review and a "re-checked past fixes" table). Screenshots sit next to the flow or state they show, each captioned with time, account, and URL.
 4. Prioritized issue list (Critical / Should-fix / Nice-to-have). Each item has an ID, repro steps, times, reproduced count, and screenshot IDs. Keep "Possible cause" separate.
 5. "Questions for Josh": deliberate-looking behavior you think is worth rethinking, with your reasoning.
 6. Untested: what you couldn't test, and exactly what would unblock it.

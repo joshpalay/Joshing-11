@@ -11,6 +11,8 @@ const { categorizeInterestDomainMock } = vi.hoisted(() => ({
 const state = vi.hoisted(() => ({
   activeRows: [] as Array<{ domain: string; broadCategory: string | null }>,
   exclusionDeletes: 0,
+  // Rows a delete of USER_DOMAIN_EXCLUSIONS reports back (non-empty = a removed topic was revived).
+  liftedExclusions: [] as Array<{ id: string }>,
 }));
 
 // Keep the real isCatchAllBroadCategory logic; only stub the LLM call.
@@ -38,7 +40,7 @@ const deleteChain = () => {
   const c: Record<string, unknown> = {};
   c.where = () => {
     state.exclusionDeletes += 1;
-    return Promise.resolve();
+    return { returning: () => Promise.resolve(state.liftedExclusions) };
   };
   return c;
 };
@@ -77,11 +79,12 @@ describe('addDeclaredInterest', () => {
     vi.clearAllMocks();
     state.activeRows = [];
     state.exclusionDeletes = 0;
+    state.liftedExclusions = [];
   });
 
   it('adds a new interest when under the cap', async () => {
     const result = await addDeclaredInterest('user-1', { label: 'Jazz', broadCategory: 'Music' });
-    expect(result).toEqual({ created: true, domain: 'Jazz', broadCategory: 'Music' });
+    expect(result).toEqual({ created: true, restored: false, domain: 'Jazz', broadCategory: 'Music' });
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
     // Adding revives a previously "removed from map" domain: the matching
     // subcategory exclusion is cleared alongside the insert.
@@ -95,15 +98,30 @@ describe('addDeclaredInterest', () => {
     expect(categorizeInterestDomainMock).toHaveBeenCalledWith('Mortgage Backed Securities');
     expect(result).toEqual({
       created: true,
+      restored: false,
       domain: 'Mortgage Backed Securities',
       broadCategory: 'Finance',
+    });
+  });
+
+  it('reports a re-add of a removed topic as restored (QA 2026-10-01, S6)', async () => {
+    // "Remove from your map" leaves the declared row active and writes an
+    // exclusion; adding it back lifts the exclusion.
+    state.activeRows = [{ domain: 'Breaking Bad', broadCategory: 'Film & Television' }];
+    state.liftedExclusions = [{ id: 'excl-1' }];
+    const result = await addDeclaredInterest('user-1', { label: 'Breaking Bad' });
+    expect(result).toEqual({
+      created: false,
+      restored: true,
+      domain: 'Breaking Bad',
+      broadCategory: 'Film & Television',
     });
   });
 
   it('is idempotent on an already-active label (case-insensitive)', async () => {
     state.activeRows = [{ domain: 'Jazz', broadCategory: 'Music' }];
     const result = await addDeclaredInterest('user-1', { label: 'jazz' });
-    expect(result).toEqual({ created: false, domain: 'Jazz', broadCategory: 'Music' });
+    expect(result).toEqual({ created: false, restored: false, domain: 'Jazz', broadCategory: 'Music' });
     expect(categorizeInterestDomainMock).not.toHaveBeenCalled();
     // Even the no-op re-add clears a lingering exclusion, so "add it back"
     // always revives a removed domain.

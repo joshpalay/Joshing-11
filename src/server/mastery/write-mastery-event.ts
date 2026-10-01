@@ -58,6 +58,23 @@ const defaultCreditDomainDeps: CreditDomainDeps = {
  * both. Anything else (same area, an unrelated re-file, no canonical row, a
  * lookup fault) keeps the served domain — fail-open, never blocks an answer.
  */
+/**
+ * The bucket a territory row should carry after an answer. A territory keeps the
+ * one it already has: each answer's category is the ANSWERED question's, and
+ * questions inside one topic disagree, so taking it every time re-filed the
+ * player's topic on a single stray question (Renaissance Florence → "General
+ * Knowledge" → another player's "Art & Architecture"; QA 2026-10-01, S5). Only an
+ * empty or catch-all bucket is upgraded from the question's.
+ */
+export function resolveTerritoryBroadCategory(
+  existing: string | null | undefined,
+  incoming: string | null | undefined,
+): string | null {
+  const kept = normalizeBroadCategory(existing ?? null);
+  if (kept && kept !== 'General Knowledge') return kept;
+  return normalizeBroadCategory(incoming ?? existing ?? null);
+}
+
 export async function resolveCreditDomain(
   servedDomain: string,
   questionId: string | null | undefined,
@@ -269,7 +286,7 @@ export async function writeMasteryEvent(params: WriteMasteryEventParams): Promis
   const existing = userTerritories.find((row) => row.canonicalSubcategory === domain);
   const authorCredit = await readAuthorCredit(params.userId, domain);
 
-  const broadCategory = normalizeBroadCategory(params.broadCategory ?? existing?.broadCategory);
+  const broadCategory = resolveTerritoryBroadCategory(existing?.broadCategory, params.broadCategory);
   const previousTier: MasteryTier = existing?.tier ?? 'establishing';
   const nextTotalPoints = (existing?.totalPoints ?? 0) + params.pointsAwarded;
   const nextTier = params.pointsAwarded > 0

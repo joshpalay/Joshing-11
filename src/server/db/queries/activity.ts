@@ -209,6 +209,34 @@ export function assertsLiveRelationship(type: string): boolean {
   return RELATIONSHIP_ASSERTION_TYPES.has(type);
 }
 
+// Rows that report a friend's own activity to you. Shown only while that person
+// is still a mutual friend: after a block was lifted, "Quad Prova played their
+// first five questions" kept appearing for someone who was no longer a friend
+// (QA 2026-10-01, S1).
+const FRIEND_ACTIVITY_TYPES = new Set<string>(['invited_friend_played_first_five']);
+
+export function needsCurrentFriend(type: string): boolean {
+  return RELATIONSHIP_ASSERTION_TYPES.has(type) || FRIEND_ACTIVITY_TYPES.has(type);
+}
+
+// One "you're connected" row per person: every friendship formation writes a
+// fresh one and ending a friendship never deletes it, so a pair who
+// re-friended showed "Tres Prova is now a friend" three times once the block
+// that hid them was lifted (QA 2026-10-01, S1). Keeps the newest.
+export function dropRepeatedRelationshipRows<
+  T extends { type: string; actorUserId: string | null; createdAt: Date },
+>(rows: T[]): T[] {
+  const newestByActor = new Map<string, T>();
+  for (const row of rows) {
+    if (!row.actorUserId || !assertsLiveRelationship(row.type)) continue;
+    const kept = newestByActor.get(row.actorUserId);
+    if (!kept || row.createdAt.getTime() > kept.createdAt.getTime()) newestByActor.set(row.actorUserId, row);
+  }
+  return rows.filter(
+    (row) => !row.actorUserId || !assertsLiveRelationship(row.type) || newestByActor.get(row.actorUserId) === row,
+  );
+}
+
 // Which of `candidateIds` are currently mutual friends of `userId` (an approved
 // follow in both directions — the migrated symmetric friendship).
 async function mutualFriendIdsAmong(userId: string, candidateIds: string[]): Promise<Set<string>> {
@@ -967,7 +995,7 @@ async function hydrateActivityRows(
   const relationshipActorIds = [
     ...new Set(
       rows
-        .filter((row) => row.actorUserId && assertsLiveRelationship(row.type))
+        .filter((row) => row.actorUserId && needsCurrentFriend(row.type))
         .map((row) => row.actorUserId as string),
     ),
   ];
@@ -976,7 +1004,7 @@ async function hydrateActivityRows(
     mutualFriendIdsAmong(userId, relationshipActorIds),
   ]);
 
-  return rows
+  return dropRepeatedRelationshipRows(rows)
     .filter((row): row is ActivityItemRow & { type: ActivityItemType } => isActivityType(row.type))
     // A block is enforced bidirectionally on every read (user-blocks.ts): no
     // row names someone on either side of a block.
@@ -986,7 +1014,7 @@ async function hydrateActivityRows(
     .filter((row) => Boolean(row.actorUserId) || !needsLiveActor(row.type))
     .filter(
       (row) =>
-        !assertsLiveRelationship(row.type) ||
+        !needsCurrentFriend(row.type) ||
         (row.actorUserId !== null && currentFriendIds.has(row.actorUserId)),
     )
     .map((row) => ({

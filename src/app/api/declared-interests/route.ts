@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       tier: 'establishing',
       totalPoints: 0,
       created: result.created,
+      restored: result.restored,
     });
   } catch (error) {
     if (error instanceof DeclaredInterestLimitError) {

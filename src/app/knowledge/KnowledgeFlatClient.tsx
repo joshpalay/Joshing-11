@@ -21,6 +21,7 @@ import { toCanonicalDomainSlug } from '@/server/profile/domain-slug';
 import { normalizeBroadCategory } from '@/lib/knowledge/broad-category';
 import { isTooBroadInterest } from '@/lib/knowledge/interest-specificity';
 import { domainKey } from '@/lib/knowledge/domain-key';
+import { addedTopicMessage, type AddedTopic } from '@/lib/topic-added-copy';
 import {
   TERRITORY_FREQUENCY_LABEL,
   type DomainPreferenceFrequency,
@@ -441,7 +442,7 @@ function KnowledgePageContent({
   // `created` comes from the POST response: an idempotent re-add of an
   // already-active topic returns created:false, and Undo must not render
   // there — it would deactivate the pre-existing interest.
-  const [addedTopic, setAddedTopic] = useState<{ domain: string; created: boolean } | null>(null);
+  const [addedTopic, setAddedTopic] = useState<AddedTopic | null>(null);
   const [addedKeys, setAddedKeys] = useState<ReadonlySet<string>>(new Set());
   const [undoing, setUndoing] = useState(false);
   useEffect(() => {
@@ -563,14 +564,14 @@ function KnowledgePageContent({
         }),
       });
       const body = (await response.json().catch(() => null)) as
-        | { domain?: string; created?: boolean; message?: string }
+        | { domain?: string; created?: boolean; restored?: boolean; message?: string }
         | null;
       if (!response.ok) {
         throw new Error(body?.message ?? 'Could not add that territory.');
       }
       // Prefer the canonical domain the server persisted over our local label.
       const domain = typeof body?.domain === 'string' && body.domain ? body.domain : territory.domain;
-      setAddedTopic({ domain, created: body?.created === true });
+      setAddedTopic({ domain, created: body?.created === true, restored: body?.restored === true });
       setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
       await loadKnowledge();
       return true;
@@ -591,14 +592,14 @@ function KnowledgePageContent({
       body: JSON.stringify({ label, ...(broadCategory ? { broadCategory } : {}) }),
     });
     const body = (await response.json().catch(() => null)) as
-      | { domain?: string; created?: boolean; message?: string }
+      | { domain?: string; created?: boolean; restored?: boolean; message?: string }
       | null;
     if (!response.ok) {
       throw new Error(body?.message ?? 'Could not add that topic.');
     }
     // Prefer the canonical domain the server persisted over our local label.
     const domain = typeof body?.domain === 'string' && body.domain ? body.domain : label;
-    setAddedTopic({ domain, created: body?.created === true });
+    setAddedTopic({ domain, created: body?.created === true, restored: body?.restored === true });
     setAddedKeys((prev) => new Set(prev).add(domainKey(domain)));
     await loadKnowledge();
   };
@@ -967,11 +968,7 @@ function KnowledgePageContent({
               <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
               <div className="flex-1">
                 <p className="m-0 text-quiet text-[var(--ink)]">
-                  {addedTopic.created ? (
-                    <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
-                  ) : (
-                    <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
-                  )}
+                  {addedTopicMessage(addedTopic)}
                 </p>
                 {addedTopic.created ? (
                   <button
@@ -1067,11 +1064,7 @@ function KnowledgePageContent({
                   <Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-gold-ink)]" aria-hidden="true" />
                   <div className="flex-1">
                     <p className="m-0 text-quiet text-[var(--ink)]">
-                      {addedTopic.created ? (
-                        <>Added &ldquo;{addedTopic.domain}&rdquo; — it&rsquo;ll show up in an upcoming round.</>
-                      ) : (
-                        <>&ldquo;{addedTopic.domain}&rdquo; is already in your topics.</>
-                      )}
+                      {addedTopicMessage(addedTopic)}
                     </p>
                     {addedTopic.created ? (
                       <button
