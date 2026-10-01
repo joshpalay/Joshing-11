@@ -2803,7 +2803,33 @@ export async function getRecentFactKeys(
   //  (2) Facts GENERATED for the viewer (served but maybe unanswered) — the prior
   //      behavior, so we still avoid re-creating something already put in front of
   //      them. Answered facts are listed first so they win the cap.
-  const [answered, generated] = await Promise.all([
+  //  (3) Facts WAITING on the viewer's home feed (an active card they haven't
+  //      answered yet, e.g. "Chiann answered this"). Without this, the build
+  //      cloned the same bank fact into the round as a +2 bonus, so the question
+  //      showed up twice — once on home, once in the Daily Five (QA 2026-10-01,
+  //      the emu report). Listed first: the set is small and the most immediate.
+  const [waiting, answered, generated] = await Promise.all([
+    db
+      .select({
+        factKey: generatedQuestions.factKey,
+        domain: generatedQuestions.canonicalSubcategory,
+      })
+      .from(feedItems)
+      .innerJoin(canonicalQuestions, eq(feedItems.questionId, canonicalQuestions.id))
+      .innerJoin(
+        generatedQuestions,
+        eq(canonicalQuestions.generatedQuestionId, generatedQuestions.id),
+      )
+      .where(
+        and(
+          eq(feedItems.recipientUserId, userId),
+          eq(feedItems.state, 'active'),
+          isNull(feedItems.answeredAt),
+          isNotNull(generatedQuestions.factKey),
+        ),
+      )
+      .orderBy(sql`${feedItems.createdAt} desc`)
+      .limit(limit),
     db
       .select({
         factKey: generatedQuestions.factKey,
@@ -2835,7 +2861,7 @@ export async function getRecentFactKeys(
 
   const out: RecentFactKeyEntry[] = [];
   const seen = new Set<string>();
-  for (const row of [...answered, ...generated]) {
+  for (const row of [...waiting, ...answered, ...generated]) {
     if (!row.factKey || seen.has(row.factKey)) continue;
     seen.add(row.factKey);
     out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
