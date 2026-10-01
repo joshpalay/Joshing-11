@@ -68,6 +68,7 @@ import { getCulturalAnchor, type CulturalAnchor } from '@/server/db/queries/acco
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { adminUserIds } from '@/server/auth/admin';
 import { planFirstRunDomains } from '@/server/daily/first-run-seeding';
+import { selectWelcomeDomains, WELCOME_MAX_PER_ROUND } from '@/server/daily/welcome-domains';
 import {
   isAreaExpansionParentOverflowEnabled,
   isNarrowKbGuardEnabled,
@@ -3150,9 +3151,37 @@ export async function generateDailyQuestionsFromKnowledgeBase(
       firstRunPlan = planFirstRunDomains(orderedEligible, count);
     }
 
-    domainsForRound = firstRunPlan.length > 0
-      ? firstRunPlan
-      : selectDiverseDomains(eligibleKb, count, recentDomainCounts, frequencyByDomain);
+    if (firstRunPlan.length > 0) {
+      domainsForRound = firstRunPlan;
+    } else {
+      // Welcome slot: a newly added area that hasn't been asked yet leads the
+      // palette, so the player meets it in the next Five or two instead of
+      // waiting for a random draw. Fail-open — a lookup miss means no welcome.
+      const welcome = await getActiveDeclaredInterests(userId)
+        .then((rows) =>
+          selectWelcomeDomains(
+            rows,
+            eligibleKb.map((d) => d.domain),
+            recentDomainCounts,
+            new Date(),
+            Math.min(WELCOME_MAX_PER_ROUND, count),
+          ),
+        )
+        .catch(() => [] as string[]);
+      const welcomeKeys = new Set(welcome.map((domain) => domain.toLowerCase()));
+      const rest = eligibleKb.filter((d) => !welcomeKeys.has(d.domain.toLowerCase()));
+      domainsForRound = [
+        ...welcome,
+        ...(count > welcome.length
+          ? selectDiverseDomains(
+              rest.length > 0 ? rest : eligibleKb,
+              count - welcome.length,
+              recentDomainCounts,
+              frequencyByDomain,
+            )
+          : []),
+      ];
+    }
   }
 
   // Admin generation cap (0121): drop capped domains from the round palette so
