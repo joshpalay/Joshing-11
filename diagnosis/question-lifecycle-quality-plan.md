@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-09-30
+last-reviewed: 2026-10-01
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -1431,5 +1431,84 @@ since the last review — the one relevant commit, `#1733`, touches
    doc), re-check whether this doc's build-time p50 recovers.
 4. Keep an eye on `batch_dedup` `failed_open` (18/306, still trending up)
    and `recent_history` (4/306, flat) on the rolling 14-day window.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-01 (diagnosis-review) — no new dispute-queue activity; `batch_dedup`/`recent_history` `failed_open` both tick up on the rolling window; `subject_entity` coverage holds; build p50 essentially flat; no new code on this doc's tracked paths
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. No
+`.env`/`.env.local` present locally (only `.env.example`).
+
+**`#1702` dispute queue: one new pending row, still zero new reviews.**
+`GradeDispute` status counts (all-time): `pending` **48** (was 47),
+`alternative_added` 31 (unchanged), `dismissed` 5 (unchanged). Latest
+`reviewed_at` across the whole table is still **2026-09-27T17:11:14.935Z**
+— byte-identical to the last four reviews. No progress on the standing
+question of whether `GradeDispute` growth reflects staff review or the
+automated recheck path agreeing with itself.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0** newly-generated rows missing it since that
+timestamp (re-queried directly, same clean result as every review since
+2026-09-17).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 321 | 37 | **5** |
+| `batch_dedup` | 321 | 18 | **20** |
+| `quality` | 321 | 121 (37.7%) | 0 |
+
+Both counters moved more than their usual single-point tick on this rolling
+window: `recent_history`'s `failed_open` ticked up 4→5; `batch_dedup`'s
+jumped 18→20, a two-point rise rather than the usual +1. Still small in
+absolute terms and still not root-caused — same "flagging for awareness"
+posture as every prior entry. `quality`'s scoped drop rate (37.7%) stays
+inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+35,315ms** (n=32), essentially flat vs. the last reading (35,292ms, n=29).
+Cross-checked against `daily-build-latency-deferral-plan.md`'s 2026-10-01
+entry (read, not re-derived): that doc's outlier/elevated-residual cluster
+grew again today (15→16 of 50 post-deferral rows, share essentially flat at
+32% vs. 33%), and that same review also surfaced a real code change to
+`persistDailyQueue`'s conflict strategy (`#1734`) — unrelated to this doc's
+own tracked files, but worth knowing about if build-timing numbers move
+unexpectedly in a future reading. The standing explanation for the elevated
+p50 (the untraced outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log --since=2026-09-30`
+on all five returns nothing. Three commits landed on `main` since the last
+review (`#1734` a daily-queue empty-round fix, `#1735` font self-hosting,
+`#1736` knowledge-map/profile polish); none touch this doc's tracked paths,
+confirmed by diffing each commit's file list directly.
+
+**`npm run check:category-integrity -- --summary`** (per this skill's step
+1) could not run this session — `tsx` is not available (`node_modules` not
+installed), the same practical gap several prior reviews of this file hit
+via a different missing dependency. Not informative either way about the
+check's own verdict; noting the gap for the record.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — `#1720`'s fix is
+   confirmed live and `#1733` extends the same code path additively; still
+   a plumbing matter, not fairness evidence.
+2. Check how `#1709`'s automated recheck path labels its `GradeDispute`
+   resolutions — still not directly investigated; no new resolutions since
+   2026-09-27 to check against anyway.
+3. Once the outlier builds are traced (now 16 named per the cross-referenced
+   doc), re-check whether this doc's build-time p50 recovers.
+4. Keep an eye on `batch_dedup` `failed_open` (20/321, ticked up more than
+   usual) and `recent_history` (5/321, ticked up) on the rolling 14-day
+   window.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

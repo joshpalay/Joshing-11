@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-09-30
+last-reviewed: 2026-10-01
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -1935,3 +1935,116 @@ cost) remains open and unresolved.
 3. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 4. Question 4 (is the bonus worth its cost) — unresolved, and the growing
    outlier share (now 33%) makes it harder to answer with a single number.
+
+### 2026-10-01 (diagnosis-review) — PR #1734 changes the tracked persist conflict mechanism, additively not a reversion; four new built rows, one joins the outlier cluster (16 of 50, 32%); median saving flat; still zero races
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**`DailyBuildMetric` totals:** `built=51` (1 baseline + 50 post-deferral, up
+from 47/46 at the last review), `carry_forward=574`, `existing_queue=65`,
+`partial_carry_forward=5`. **`outcome='lost_persist_race'` is still 0
+rows**, cumulative, all time — no change from every prior reading.
+
+**Four new post-deferral rows since the last review, all from the
+2026-09-30 17:05 UTC cron window:**
+
+| build_id | deferred | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual |
+|---|---|---:|---:|---:|---:|---:|
+| `ec84abbe-…` | true | 45,889 | 38,562 | 7,327 | 776 | 6,551 — between bands, not classified either way |
+| `8e98f96e-…` | true | 56,915 | 25,312 | 31,603 | 17,726 | 13,877 — large bonus itself, not the small-bonus shape; closer to `93408f6e-…`'s "negative case" pattern |
+| `a10db236-…` | true | 38,112 | 15,518 | 22,594 | 784 | **21,810 — outlier-class, the established small-bonus/huge-residual shape** |
+| `d524b774-…` | true | 37,302 | 35,337 | 1,965 | 1,118 | 847 — normal band |
+
+**One of the four is a clean new outlier** (`a10db236-…`): 784ms of bonus
+generation paired with 21,810ms of unexplained residual, the same shape as
+every prior outlier in this cluster. **This raises the outlier/elevated
+count from 15 of 46 to 16 of 50 (32%)** — the share is essentially flat
+versus last review's 33% even though the raw count grew, since three of the
+four new rows don't fit the pattern. `8e98f96e-…` is a borderline case
+worth naming precisely rather than folding in either direction: its
+residual (13,877ms) sits inside the historical outlier range, but unlike
+every named outlier its bonus `generationMs` (17,726ms) is itself large, not
+small — the same shape `93408f6e-…` showed on 2026-09-30's prior entry
+(`saving is large but almost entirely explained by an unusually long bonus
+round itself`). Not adding it to the named outlier set. Full outlier set
+unchanged from last review plus today's `a10db236-…`.
+
+**No third `deferred: false` occurrence** — all four new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**Phase 3a (mechanism) holds** on all four new rows: `saved ≥` each row's
+own bonus `generationMs`.
+
+**3b population: median saving 14,812.5ms** (n=50, same value as last
+review's n=46) — the new rows split around the existing distribution
+without moving the median at all.
+
+**Significant code change to this doc's own tracked mechanism, read by
+diff, not title: `#1734`** ("fix(daily): unfriend/block no longer wipes a
+round; empty rounds get rebuilt"), merged 2026-09-30T06:47:49-04:00. This
+touches `persistDailyQueue` directly — the exact function open question 5's
+fix lives in — but is an **additive fix for a different, adjacent bug, not
+a reversion of the persist-race fix**. What changed:
+
+- `persistDailyQueue`'s conflict strategy moved from `onConflictDoNothing`
+  to `onConflictDoUpdate` with a `setWhere: jsonb_array_length(slots) = 0`
+  fence. Read directly: a conflict against an **already-populated** row
+  still produces an empty `RETURNING` and `won: false`, exactly as before —
+  the invariant this doc's open question 5 cares about (a losing build can
+  never overwrite a served queue) is explicitly preserved, and the updated
+  `persist-daily-queue-race.test.ts` now asserts the fenced `doUpdate` shape
+  rather than the old `doNothing` shape, so the regression guard moved with
+  the code rather than going stale.
+- The bug this targets is different: a build that lost the race to an
+  **empty** row (`slots: []`) used to conflict and discard its own real
+  slots exactly like a populated row did (QA 2026-09-29, C1) — stranding the
+  player on "not ready yet" for the whole day, since the orchestrator and
+  `GET /api/daily/queue` both treat an empty row as "no queue." The new
+  `setWhere` lets a build's insert overwrite only that specific empty-row
+  case. New coverage: `empty-round-recovery.pg.test.ts` (a new real-Postgres
+  test) and a new `daily-empty-round.yml` CI workflow. A related fix in the
+  same PR, `drop-severed-bonus.ts`, fixes a NULL-handling bug in the
+  unfriend/block slot-removal predicate that was deleting every unanswered
+  CORE slot (not just severed bonus ones) — unrelated to the persist-race
+  mechanism but explains the PR's "unfriend/block no longer wipes a round"
+  half.
+- `scripts/build-latency-anomaly.verify.ts` itself was **not** touched by
+  this PR.
+
+**Not run this pass** (writes to the database, not a casual status check
+per this doc's own §7 convention — only run on demand before merging a
+change that touches this exact contract): `npm run
+verify:build-latency-anomaly`'s Scenario A/B should be re-run against the
+new `onConflictDoUpdate` strategy to directly confirm the winner's
+populated queue is still untouchable, rather than relying on the test-file
+diff alone. Flagging as the leading new item rather than running a
+write-capable script from a reconnaissance pass.
+
+**No other code change since the last review:** `git log --since=2026-09-29`
+on `queue-orchestrator.ts`, `daily.ts`, and `build-context.ts` shows only
+`#1734` (above). Two other commits landed on `main` since the last review
+(`#1735` font self-hosting, `#1736` knowledge-map/profile polish) — neither
+touches any of this doc's three tracked files.
+
+**No decision-resolving change.** Status stays `active`. The outlier-trace
+next step is unchanged (still needs Vercel access this session doesn't
+have). Question 4 (is the bonus worth its cost) remains open and
+unresolved. The new item is confirming Scenario A/B against `#1734`'s
+updated conflict strategy, not a change to any of the four enumerated open
+questions.
+
+### Next steps (revised)
+1. **New:** re-run `npm run verify:build-latency-anomaly` to confirm
+   Scenario A/B still pass against `#1734`'s `onConflictDoUpdate` +
+   `setWhere` conflict strategy — the test-file diff strongly suggests they
+   will, but this doc's own §7 convention is to verify on demand rather than
+   infer from a diff alone.
+2. **Trace the now-sixteen outsized/elevated-residual builds** — needs
+   Vercel function logs. The all-time-high residual remains `90da8604-…`
+   (82.9s, 2026-09-27).
+3. Watch for a third `deferred: false` occurrence — still only two on
+   record, unchanged this reading.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.

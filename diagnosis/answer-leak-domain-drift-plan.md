@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-09-30
+last-reviewed: 2026-10-01
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -2519,5 +2519,69 @@ recommended-but-unrun blind-labeling pass, now with a sharply larger sample
    of 364, and accelerating — its largest single-day jump yet) — recommended
    since 2026-09-25, still not run.
 4. The three open `ContentReport` rows remain unaddressed, now 24 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-01 (diagnosis-review) — 24 clean days on both established flags; `answer_leak_any_token` keeps growing (51→54); `ContentReport` rows now 25 days open; no new code touching tracked paths
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. No
+`.env`/`.env.local` present locally (only `.env.example`) — same as every
+review since 2026-09-12.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 584 | 0 | 0 |
+| `domain_drift` | 584 | 0 | 0 |
+| `answer_leak_single_word` | 481 | 2 | 0 |
+| `answer_leak_any_token` | 398 | **54** | 0 |
+| `answer_shape` | 584 | 2 | 0 |
+| `quality` | 584 | 224 | 230 (unchanged since 2026-09-25) |
+
+`answer_leak_partial` / `domain_drift` are now at **24 consecutive clean
+days**, 584 considered (up from 550), still 0 drops each — Mechanism-2
+code-fix decision unchanged, still waiting on `domain_drift` to catch
+something real. `answer_leak_single_word` gained 34 considered (447→481),
+no new drop (still 2). `answer_leak_any_token` gained 3 more drops (51→54,
+364→398 considered) — a much smaller jump than 2026-09-30's 17-drop spike;
+the recommended blind-labeling pass (open decision 6) has still **not**
+been run.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id: `139e1932…`, `800c44a3…`, `357618e3…`), now **25 days**
+since they were filed (2026-09-06). Not this doc's action item, but the age
+keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,544**, up from 2,497 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths:** `git log --since=2026-09-30`
+on `self-answering.ts`, `off-domain-second-opinion.ts`,
+`generate-questions.ts`, `sweep-bank-quality.ts`, and
+`rewrite-bank-demotions.ts` returns nothing. Three commits landed on `main`
+since the last review (`#1734` a daily-queue empty-round recovery fix —
+relevant instead to `daily-build-latency-deferral-plan.md`, see that doc's
+entry today — `#1735` self-hosting fonts, `#1736` knowledge-map/profile
+polish) — confirmed by diffing each commit's file list directly, none touch
+this doc's tracked gate/generation paths.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment's `.env`, same self-skip condition as every prior review.
+Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 54 of 398.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` / `domain_drift`
+   for an actual drop — now 24+ clean days.
+2. Watch `answer_leak_single_word` accumulate more data (still 2 of 481).
+3. **A blind-labeling pass on `answer_leak_any_token` remains due** (now 54
+   of 398, further past the ~13-hit threshold) — recommended since
+   2026-09-25, still not run.
+4. The three open `ContentReport` rows remain unaddressed, now 25 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
