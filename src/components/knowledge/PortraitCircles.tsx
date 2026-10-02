@@ -517,8 +517,7 @@ export function PortraitCircles({
       )}
 
       <p style={explainerStyle}>
-        Numbers inside circles = questions you&apos;ve written that others have
-        answered
+        Numbers inside circles = questions answered in that topic
       </p>
 
       <div>

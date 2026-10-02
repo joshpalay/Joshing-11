@@ -95,7 +95,9 @@ import {
   domainWeeklyCap,
   dropCappedDomains,
   isCustomDomainWeightingEnabled,
+  isDryDomainRetryEnabled,
   selectCustomDomainsForRound,
+  selectDryDomainsForRetry,
 } from '@/server/daily/domain-selection';
 import { isGenericCanonicalAnswer, normalizeCanonicalAnswerLabel } from '@/server/answers/canonical-answer';
 import { normalizeAnswerVariants, splitPackedAnswer } from '@/server/answers/answer-variants';
@@ -252,6 +254,10 @@ TEST (apply before emitting, every question): strike the interrogative clause an
 - GOOD (same subject, recall restored): "How many prisoners did the crowd actually find inside the Bastille when it fell?" → the player must know the famous anticlimax (seven).
 - NOT this defect: context that narrows a field without settling it ("what is the name of Sherlock Holmes's smarter older brother" — knowing he has a brother does not tell you "Mycroft"). Context is fine; a complete description is not.
 An easy question is allowed to be EASY. It is not allowed to answer itself. Do not satisfy the accessible tier by narrating the answer — pick a genuinely well-known fact and ask it plainly instead.
+FOOD, CUISINE AND COOKING domains fall into this more than any other: "describe the dish, then ask its name" is the default shape there, and it is almost always a definition. Do not describe a dish, ingredient, or technique and ask what it is called. Instead NAME the dish (or ingredient, or technique) in the question and ask about something a food lover would know beyond its description — the country or region it comes from, the occasion it is eaten on, the person, place, or story behind its name, the one ingredient it is famous for, or what a cook would call a related dish.
+- BAD (definition supplied): "What thin, unleavened flatbread, cooked on a hot griddle, is the everyday bread of northern India?" → the setup is a dictionary entry for roti.
+- GOOD (dish named, real recall): "Feijoada, the black-bean and pork stew, is the national dish of which country?" → Brazil.
+- GOOD: "Which Japanese city is famous for a style of okonomiyaki built in layers, with noodles, rather than mixed into one batter?" → Hiroshima.
 
 SINGLE ASK (Rule 3b — ALL tiers):
 Ask for exactly ONE thing. A question poses ONE question with ONE answer. NEVER bundle two distinct asks into a single question — no "what is X — and what is Y?", no "who did A, and where did it happen?", no compound joined by "and". If a setup tempts you to ask two things, keep the single better one and cut the other. This is the most common way a question goes wrong: it reads as one sentence but secretly demands two separate facts, so it has no clean single answer.
@@ -3426,6 +3432,67 @@ export async function generateDailyQuestionsFromKnowledgeBase(
         shapesByDomain,
       },
     );
+
+    // Dry-domain retry: when the round came back short, give each domain that
+    // yielded nothing (declared topics first) one more attempt, one question
+    // each. Without this a thin topic whose single question fails a gate loses
+    // its slot every time it is picked. This round's survivors go in as
+    // same-batch avoid texts so the retry can't duplicate them.
+    if (isDryDomainRetryEnabled()) {
+      const declaredKeys = new Set(
+        knowledgeBase
+          .filter((entry) => entry.territoryType === 'declared')
+          .map((entry) => domainKey(entry.domain)),
+      );
+      const retryDomains = selectDryDomainsForRetry(
+        domainsForLlm,
+        new Set(llmGenerated.map((row) => domainKey(row.canonicalSubcategory))),
+        remainingCount - llmGenerated.length,
+        declaredKeys,
+      );
+      if (retryDomains.length > 0) {
+        console.info('[daily/generate-questions] retrying dry domains', {
+          userId,
+          domains: retryDomains,
+        });
+        const retried = await generateDailyQuestions(
+          retryDomains,
+          retryDomains.length,
+          userId,
+          previousQuestionTexts,
+          llmGenerated.map((row) => row.questionText),
+          domainSkips.size > 0 ? domainSkips : undefined,
+          preferences.difficulty,
+          domainDifficultyOverrides,
+          adaptiveLevel,
+          previousFactKeys,
+          subAnglesByDomain,
+          territoryByDomain,
+          strengthByDomain,
+          culturalAnchor,
+          {
+            underDifficultyReserve: options.underDifficultyReserve,
+            provider: genProvider,
+            domainExamples,
+            domainReferences,
+            subjectsByDomain,
+            shapesByDomain,
+          },
+        ).catch((error) => {
+          console.warn('[daily/generate-questions] dry-domain retry failed (non-fatal)', {
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return [] as GeneratedQuestionRow[];
+        });
+        console.info('[daily/generate-questions] dry-domain retry result', {
+          userId,
+          offered: retryDomains,
+          recovered: retried.map((row) => row.canonicalSubcategory),
+        });
+        llmGenerated = [...llmGenerated, ...retried];
+      }
+    }
 
     // Dry-round observation (D-SUPPLY-FINITENESS-01 #4): of the domains OFFERED
     // to fresh generation this round, which yielded a surviving row and which
