@@ -117,6 +117,9 @@ type FeedApiItem = {
   // can't drift out of sync with the server emitter again — a hand-written literal
   // here was the B-9 regression (typecheck broke when 'house_authored' was added).
   question_source?: QuestionSource | null
+  // True only when the feed item's sender wrote the question (a forward of
+  // someone else's question is 'authored' but not the sender's).
+  sender_is_author?: boolean
   is_in_bank: boolean
   domain_pill?: string | null
   broad_category?: string | null
@@ -388,6 +391,13 @@ function baseTypedFields(item: FeedApiItem, answered = false, hideTimestamp = fa
   }
 }
 
+// "{sender} sent you a question they wrote" — only when the sender is the
+// human author. A forwarded friend's question is 'authored' too, but not by
+// the sender (QA 2026-10-01 run 2).
+export function isAuthoredBySender(item: Pick<FeedApiItem, 'question_source' | 'sender_is_author'>): boolean {
+  return item.question_source === 'authored' && item.sender_is_author === true
+}
+
 function toTypedFeedItem(item: FeedApiItem, hideTimestamp = false) {
   const base = baseTypedFields(item, false, hideTimestamp)
 
@@ -397,7 +407,7 @@ function toTypedFeedItem(item: FeedApiItem, hideTimestamp = false) {
       type: 'direct_sent' as const,
       senderName: item.source_friend_display_name,
       senderHref: item.source_profile_href ?? profileHref(item.source_user_id),
-      authoredBySender: item.question_source === 'authored',
+      authoredBySender: isAuthoredBySender(item),
     } satisfies DirectSentFeedItem
   }
 

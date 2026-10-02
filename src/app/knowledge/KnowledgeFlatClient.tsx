@@ -28,6 +28,7 @@ import {
   type NearbyTerritory,
 } from '@/lib/daily/territory-model';
 import { buildSuggestionPool } from '@/lib/knowledge/suggestion-pool';
+import { isOnMap } from '@/lib/knowledge/on-map';
 import { TopicSuggestionCarousel } from '@/components/knowledge/TopicSuggestionCarousel';
 import { AddTopicField } from '@/components/interests/AddTopicField';
 import type { KnowledgeTreeNode } from '@/server/knowledge/knowledge-tree';
@@ -123,7 +124,7 @@ function toPortraitEntry(domain: DomainMastery): PortraitEntry {
     broadCategory: normalizeBroadCategory(domain.broadCategory) ?? 'General Knowledge',
     totalMasteryPoints: Math.max(domain.points, domain.isDeclaredInterest ? 1 : 0),
     tier: asTier(domain.tier),
-    authoredAnsweredCount: domain.questionsAnswered,
+    answeredCount: domain.questionsAnswered,
   };
 }
 
@@ -619,7 +620,7 @@ function KnowledgePageContent({
   };
 
   const portraitEntries = useMemo(
-    () => visibleDomains.map(toPortraitEntry),
+    () => visibleDomains.filter(isOnMap).map(toPortraitEntry),
     [visibleDomains],
   );
   // One entry per declared interest — no fixed slot count and no cap. The manage
@@ -639,14 +640,20 @@ function KnowledgePageContent({
   }, [data, declaredKeys]);
 
   const topCardDomains = useMemo(() => visibleDomains.filter((domain) => domain.points > 0).slice(0, 5), [visibleDomains]);
-  const expandingDomains = data?.pageData.expandingDomains ?? [];
+  // "Recently expanding" is derived from answer history, so without this it
+  // announced "New territory opened this week" for topics that aren't on the
+  // map — answered-wrong-only, a declined bonus, or a removed topic.
+  const expandingDomains = useMemo(() => {
+    const onMapKeys = new Set(visibleDomains.filter(isOnMap).map((domain) => domainKey(domain.domain)));
+    return (data?.pageData.expandingDomains ?? []).filter((entry) => onMapKeys.has(domainKey(entry.domain)));
+  }, [data, visibleDomains]);
   const showShareNotice = (message: string) => {
     setQuestionToast(message);
     window.setTimeout(() => setQuestionToast(null), 2200);
   };
   const yourMind = data ? displayMind(visibleDomains, data.pageData.declaredInterests) : '';
   const displayName = 'You';
-  const hasAnything = sortedDomains.length > 0;
+  const hasAnything = portraitEntries.length > 0;
 
   // Share payload for the Knowledge Portrait card, shared by the off-screen
   // capture card, the direct-share handler, and the modal fallback.

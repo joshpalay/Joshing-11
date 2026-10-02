@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { GameplayChatThread, type ChatMessage } from '@/components/play/GameplayChat';
 import {
   buildCatchupResultMessage,
+  markRecheckAccepted,
   type CatchupAnswerResponse,
   type CatchupQueueItem,
 } from '@/components/play/useCatchupFlow';
@@ -234,5 +235,30 @@ describe('useCatchupFlow result message (B-9: commentary + aside reach the rende
     // Under-exposure check: a hidden aside must not leak either label.
     expect(rendered).not.toContain(INSIDE_JOKE_LABELS.relational);
     expect(rendered).not.toContain(INSIDE_JOKE_LABELS.editorial);
+  });
+});
+
+describe('markRecheckAccepted (QA 2026-10-01 run 2: accepted recheck left the card wrong)', () => {
+  const wrong = () =>
+    buildCatchupResultMessage({
+      id: 'r-1',
+      item: catchupItem(),
+      data: answerResponse({ result: 'incorrect', isCorrect: false, consolation: 'Close — same family.' }),
+      isCorrect: false,
+      submittedAnswer: 'Handel',
+      pointsAwarded: 0,
+      recheckAction: { onSubmit: async () => ({ accepted: true, message: '' }) },
+    });
+
+  it('flips the matching wrong result card to correct with the recheck points', () => {
+    const [flipped] = markRecheckAccepted([wrong()], 'queue-1:0', 25);
+    expect(flipped).toMatchObject({ kind: 'result', result: 'correct', pointsAwarded: 25, consolation: null });
+    expect(html([flipped])).not.toContain('Not this time');
+  });
+
+  it('leaves other items alone', () => {
+    const other = { ...wrong(), id: 'r-2', assignmentId: 'queue-1:1' };
+    const [, untouched] = markRecheckAccepted([wrong(), other], 'queue-1:0', 25);
+    expect(untouched).toBe(other);
   });
 });

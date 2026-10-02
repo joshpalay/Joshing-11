@@ -382,7 +382,9 @@ function StreakQuestionCard({
           borderRadius: 12,
           boxShadow: 'var(--shadow-card)',
           padding: '16px 18px 14px',
-          opacity: spent ? 0.72 : 1,
+          // No opacity here: an opacity < 1 makes the card a stacking context,
+          // which trapped the send menu's sheet under the bottom nav and FAB
+          // (QA 2026-10-01 run 2). The settled fade lives on the question text.
         }}
       >
         {showViaLine ? (
@@ -463,6 +465,7 @@ function StreakQuestionCard({
             // follows it (2026-08-06) — so it keeps a trailing margin only when
             // an actions row follows. The answer blocks own their top spacing.
             margin: spent || revealed ? 0 : '0 0 14px',
+            opacity: spent ? 0.72 : 1,
           }}
         >
           {/* B-13.1: no curly quotes — the card frame already sets the question

@@ -8,7 +8,7 @@ function entry(overrides: Partial<PortraitEntry> & { canonicalSubcategory: strin
     broadCategory: 'Literature',
     totalMasteryPoints: 10,
     tier: 'familiar',
-    authoredAnsweredCount: 0,
+    answeredCount: 0,
     ...overrides,
   };
 }
