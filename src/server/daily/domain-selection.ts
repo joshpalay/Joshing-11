@@ -80,6 +80,50 @@ export function isCustomDomainWeightingEnabled(): boolean {
   return raw !== '0' && raw !== 'false';
 }
 
+// Dry-domain retry (2026-10-02). A thin domain gets ONE question per round, and
+// when the gates reject it the slot silently goes to another domain — so a topic
+// whose questions keep failing (World Cuisines: confit, carbonara, both
+// DEFINITION_SUPPLIED) is picked day after day and never served. One extra
+// generation call, only when the round came back short. Defaults ON; set
+// DRY_DOMAIN_RETRY=0 (or false) to turn it off without a redeploy.
+export const DRY_DOMAIN_RETRY_MAX = 3;
+
+export function isDryDomainRetryEnabled(): boolean {
+  const raw = process.env.DRY_DOMAIN_RETRY?.trim().toLowerCase();
+  return raw !== '0' && raw !== 'false';
+}
+
+/**
+ * Domains to re-offer for a second generation attempt: those offered this round
+ * that yielded no surviving question, the player's declared topics first, capped
+ * by the round's shortfall and DRY_DOMAIN_RETRY_MAX. Empty when the round is not
+ * short — a full round means nothing was lost. Matched on domainKey() because
+ * the persist path reconciles labels.
+ */
+export function selectDryDomainsForRetry(
+  offered: string[],
+  yieldedKeys: ReadonlySet<string>,
+  shortfall: number,
+  declaredKeys: ReadonlySet<string>,
+  max: number = DRY_DOMAIN_RETRY_MAX,
+): string[] {
+  const limit = Math.min(shortfall, max);
+  if (limit <= 0) return [];
+  const seen = new Set<string>();
+  const dry: string[] = [];
+  for (const domain of offered) {
+    const key = domainKey(domain);
+    if (yieldedKeys.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    dry.push(domain);
+  }
+  const declaredFirst = [
+    ...dry.filter((domain) => declaredKeys.has(domainKey(domain))),
+    ...dry.filter((domain) => !declaredKeys.has(domainKey(domain))),
+  ];
+  return declaredFirst.slice(0, limit);
+}
+
 /**
  * Weighted sample WITHOUT replacement: draw up to `count` distinct items, each
  * item's chance of being drawn proportional to its weight. Non-positive weights
