@@ -33,6 +33,7 @@ import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import type { GradableQuestionType } from '@/server/grading';
 import { getActiveDeclaredInterests } from '@/server/db/queries/declared-interests';
 import { getDailyPreferences } from '@/server/db/queries/daily-preferences';
+import { EMPTY_HIDDEN_IDS, getHiddenQuestionIds, type HiddenQuestionIds } from '@/server/db/queries/hidden-questions';
 import {
   notBlockedGeneratedByContentReport,
   notSuppressedByContentReport,
@@ -791,20 +792,41 @@ export async function resolveCreatorNames(
   return new Map(nameRows.map((row) => [row.id, row.displayName]));
 }
 
+// A slot is hidden when the player hid its question in either id space
+// (generated rows carry generated_question_id; curated/authored carry question_id).
+export function isHiddenSlot(
+  slot: { question_id?: string | null; generated_question_id?: string | null },
+  hiddenIds: HiddenQuestionIds,
+): boolean {
+  const generatedId = slot.generated_question_id;
+  const questionId = slot.question_id;
+  return (
+    (Boolean(generatedId) && hiddenIds.generatedQuestionIds.has(generatedId as string)) ||
+    (Boolean(questionId) && hiddenIds.questionIds.has(questionId as string))
+  );
+}
+
 export async function getCatchupQuestions(userId: string): Promise<CatchupQuestion[]> {
   const { assignmentDateStr } = getDailyAssignmentBounds();
 
+  // "Never show this question" is absolute on every surface, catch-up included:
+  // hiding also marks the slot skipped, which made it catch-up eligible, so a
+  // hidden question came straight back as a "missed" one (QA 2026-10-01 run 2,
+  // C1). Fail-open like the Daily Five build: a lookup blip drops no items.
+  const hiddenIds = await getHiddenQuestionIds(userId).catch(() => EMPTY_HIDDEN_IDS);
   const [dailyItems, feedItemsForCatchup] = await Promise.all([
-    getDailyCatchupItems(userId, assignmentDateStr),
+    getDailyCatchupItems(userId, assignmentDateStr, hiddenIds),
     getFeedCatchupItems(userId, assignmentDateStr),
   ]);
+  const visibleFeedItems = feedItemsForCatchup.filter((item) => !hiddenIds.questionIds.has(item.questionId));
 
-  return dedupeCatchUpItems(orderCatchUpItems([...dailyItems, ...feedItemsForCatchup]));
+  return dedupeCatchUpItems(orderCatchUpItems([...dailyItems, ...visibleFeedItems]));
 }
 
 async function getDailyCatchupItems(
   userId: string,
   assignmentDateStr: string,
+  hiddenIds: HiddenQuestionIds = EMPTY_HIDDEN_IDS,
 ): Promise<CatchupQuestion[]> {
   const [queues, preferences] = await Promise.all([
     db
@@ -844,7 +866,8 @@ async function getDailyCatchupItems(
         (slot) =>
           isCatchUpQueueDateEligible(queueDate, assignmentDateStr) &&
           isCatchUpSlotEligible(slot, isTodaysQueue) &&
-          !isRestingDomain(slot.domain),
+          !isRestingDomain(slot.domain) &&
+          !isHiddenSlot(slot, hiddenIds),
       )
       .map((slot) => ({ queue, slot }));
   });

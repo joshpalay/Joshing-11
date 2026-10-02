@@ -23,7 +23,7 @@ export function toPortraitEntry(domain: DomainMastery): PortraitEntry {
       domain.isDeclaredInterest ? 1 : 0
     ),
     tier: asTier(domain.tier),
-    authoredAnsweredCount: domain.questionsAnswered,
+    answeredCount: domain.questionsAnswered,
   }
 }
 

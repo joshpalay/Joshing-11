@@ -206,6 +206,20 @@ export function buildCatchupResultMessage(params: {
   };
 }
 
+// An accepted recheck turns this catch-up item's wrong result card into a
+// correct one carrying the recheck's points. Pure so a test can pin it.
+export function markRecheckAccepted(
+  messages: ChatMessage[],
+  assignmentId: string,
+  pointsAwarded: number,
+): ChatMessage[] {
+  return messages.map((message) =>
+    message.kind === 'result' && message.assignmentId === assignmentId && message.result === 'wrong'
+      ? { ...message, result: 'correct', pointsAwarded, consolation: null }
+      : message,
+  );
+}
+
 function questionMessage(item: CatchupQueueItem, position: number): ChatMessage {
   const badges: NonNullable<Extract<ChatMessage, { kind: 'question' }>['badges']> = [];
   const tier = difficultyEstimateToTierLabel(item.difficultyEstimate);
@@ -669,6 +683,11 @@ export function useCatchupFlow() {
       // Reflect the flip in the round tally + recap so the summary doesn't still
       // read this turn as a miss. The recap entry is keyed by questionId.
       setStats((existing) => ({ ...existing, correct: existing.correct + 1 }));
+      // Flip the result card itself too, as the live Daily Five does for its
+      // slot: without this the card kept "✕ Not this time", "+0 points" and the
+      // wrong-answer consolation right beside "Recheck accepted" (QA 2026-10-01
+      // run 2). GameplayChat keeps the accepted note on the now-correct card.
+      setMessages((existing) => markRecheckAccepted(existing, item.dailyQueueItemId, pointsAwarded));
       setBatchRecords((existing) =>
         existing.map((record) =>
           record.questionId === item.questionId && record.outcome === 'wrong'

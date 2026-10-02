@@ -25,7 +25,10 @@ export type PortraitEntry = {
   broadCategory: string
   totalMasteryPoints: number
   tier: PortraitTier
-  authoredAnsweredCount: number
+  // Questions answered in this topic — the number drawn inside the circle. It
+  // was named authoredAnsweredCount and captioned "questions you've written
+  // that others have answered", which no caller ever supplied (QA 2026-10-01).
+  answeredCount: number
 }
 
 type PortraitCirclesProps = {
@@ -290,7 +293,7 @@ export function PortraitDomainCircle({
   const showMasteryCount =
     showCount &&
     entry.tier !== 'establishing' &&
-    entry.authoredAnsweredCount > 0
+    entry.answeredCount > 0
   const countFontSize = Math.min(48, Math.max(10, Math.round(size * 0.13)))
 
   const handleClick = () => {
@@ -344,7 +347,7 @@ export function PortraitDomainCircle({
                 lineHeight: 1,
               }}
             >
-              {entry.authoredAnsweredCount}
+              {entry.answeredCount}
             </span>
           )}
         </KnowledgeBubble>
@@ -517,8 +520,7 @@ export function PortraitCircles({
       )}
 
       <p style={explainerStyle}>
-        Numbers inside circles = questions you&apos;ve written that others have
-        answered
+        Numbers inside circles = questions answered in each topic
       </p>
 
       <div>

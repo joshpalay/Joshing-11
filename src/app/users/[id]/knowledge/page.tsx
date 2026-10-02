@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { KnowledgePeaksView } from '@/components/knowledge/KnowledgePeaksView'
 import { KnowledgeCard } from '@/components/knowledge/KnowledgeCard'
 import { PortraitCircles } from '@/components/knowledge/PortraitCircles'
+import { isOnMap } from '@/lib/knowledge/on-map'
 import { getSession } from '@/server/auth/session'
 import { getKnowledgeMapData } from '@/server/knowledge/knowledge-tree'
 import { getFullyExploredDomains } from '@/server/knowledge/fully-explored'
@@ -78,12 +79,12 @@ export default async function FriendKnowledgePage({
     (a, b) =>
       b.points - a.points || a.displayName.localeCompare(b.displayName),
   )
-  const portraitEntries = sortedDomains.map(toPortraitEntry)
+  const portraitEntries = sortedDomains.filter(isOnMap).map(toPortraitEntry)
   const topDomains = topPointPositiveDomains(sortedDomains, 5)
   const totalPointPositiveDomains = sortedDomains.filter(
     (domain) => domain.points > 0,
   ).length
-  const hasKnowledge = sortedDomains.length > 0
+  const hasKnowledge = portraitEntries.length > 0
   const mindStatement = buildMindStatement(portrait.user.displayName, topDomains)
   const visibleTotalPoints = isOwner
     ? mastery.totalPoints

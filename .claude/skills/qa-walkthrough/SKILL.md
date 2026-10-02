@@ -63,7 +63,13 @@ Each was fixed after an earlier run. Confirm it still holds and say so in the re
 - A topic stays in the category the player chose. Check that A's Renaissance Florence shows under History and Final Fantasy under Pop Culture, before and after playing (2026-10-01 S5).
 - Removing a topic says the points are kept, and re-adding it says "… is back on your map — the points you'd earned are still there." (2026-10-01 S6).
 - After friend, then unfriend or block, then unblock, then friend again, the feed shows ONE "<name> is now a friend" row, and a former friend's activity ("played their first five questions") disappears once you're no longer friends (2026-10-01 S1).
-- "Never show this question" works (fixed after 2026-09-26).
+- "Never show this question" works (fixed after 2026-09-26) — including after the next 1 PM: the hidden question must NOT come back in catch-up (2026-10-01 run 2, C1).
+- A topic you only answered in (a wrong From Friends answer, or a bonus where you chose "Not now") does NOT show on Manage your topics, the knowledge circles, or "Recently expanding". Test with an account that has never removed that topic: a removed topic hides the result (2026-10-01 run 2).
+- On a played From Friends card on home, the airplane's sheet opens ABOVE the bottom nav and the + button, and "Text it" can be tapped; same for "Send in Joshing" (2026-10-01 run 2).
+- After "Argue your point" is accepted in catch-up, the card turns correct: no "Not this time", no "+0 POINTS" (2026-10-01 run 2).
+- The key under the knowledge circles reads "Numbers inside circles = questions answered in each topic" (2026-10-01 run 2).
+- Forwarding a friend's question: the receiver sees "<sender> sent you this", not "a question they wrote" (2026-10-01 run 2).
+- "Text it" carries the sender's own invite link (the one whose topics match the question, else their first), not the bare site URL (2026-10-01 run 2).
 Add to this list whenever a run's findings get fixed.
 
 ### Known deliberate decisions: do NOT file these as bugs
@@ -84,7 +90,7 @@ If you think one hurts the experience, list it under "Questions for Josh" with y
 - Developer tools are admin-only. If A can't see them, that's expected.
 - The send airplane on Lately / Activity cards only appears on questions you already know (answered right or wrong, or wrote). No airplane on an unplayed card is intended (Josh, 2026-10-01).
 - A question you WROTE counts as known, so its answer and airplane show on "<friend> answered your question" cards (2026-10-01).
-- "Text it" goes through your phone's own Messages app (you pick the person there), not Joshing's own texts. On a computer it copies the text instead (2026-10-01).
+- "Text it" goes through your phone's own Messages app (you pick the person there), not Joshing's own texts. On a computer it copies the text instead (2026-10-01). Its link is the sender's own invite link, so whoever signs up through it becomes the sender's friend; with no links it falls back to the site URL (2026-10-02).
 - Right after answering a From Friends question wrong, "Text it" can go out without the answer until the page is reloaded. Accepted (2026-10-01).
 - Still owed: a real-phone check of "Text it" on iPhone and on Android. Browser automation can't open Messages, so list it under "Questions for Josh" until he confirms it.
 

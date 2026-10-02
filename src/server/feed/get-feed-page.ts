@@ -346,6 +346,11 @@ export async function getFeedPagePayload(viewerUserId: string, options: FeedPage
         // to the curated verb (B-5: a curated/LLM send must never imply a human
         // wrote it).
         question_source: question?.source ?? null,
+        // "{sender} sent you a question THEY wrote" needs the sender to be the
+        // author, not just any human: a forwarded friend's question is
+        // 'authored' too (QA 2026-10-01 run 2: "Duo sent you a question they
+        // wrote" over "by Uno Prova").
+        sender_is_author: question?.creatorId ? question.creatorId === item.sourceUserId : false,
         is_in_bank: item.questionId ? Boolean(bankedById[item.questionId]) : false,
         explanation: question?.explainerBrief ?? question?.factualExplanation ?? null,
         domain_pill: domain,
