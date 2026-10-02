@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-01
+last-reviewed: 2026-10-02
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -2584,4 +2584,98 @@ recommended-but-unrun blind-labeling pass, now at 54 of 398.
    2026-09-25, still not run.
 4. The three open `ContentReport` rows remain unaddressed, now 25 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-02 (diagnosis-review) — `domain_drift` records its FIRST real hit since the flip (37 considered, 1 dropped, 2026-10-01); everything else is incremental
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+yesterday. No `.env`/`.env.local` present locally (only `.env.example`) —
+same as every review since 2026-09-12. Unusually, `node_modules` WAS
+installable this session (`npm ci` succeeded), but `DATABASE_URL` is still
+absent, so `npm run check:category-integrity` itself still can't run
+directly; its read-only queries were reproduced by hand via the Supabase
+MCP connection and run through the same pure `analyzeCategoryIntegrity`
+function instead (see this review's top-level summary for the verdict —
+`ok`, no hard failures — that check is shared across all four diagnosis
+docs, so its detail isn't repeated here).
+
+**The headline finding, not a decision-resolver but the single biggest
+change since the flip:** `domain_drift` recorded `considered: 37, dropped:
+1` on **2026-10-01** — the first real hit on this gate since
+`DOMAIN_DRIFT_DROP_ENABLED` went on 2026-09-08, after 24 straight days at
+`dropped: 0`. Cumulative since the flip: 667 considered, 1 dropped (up from
+584/0 yesterday). Matches `quality:OFF_DOMAIN`'s own per-defect counter
+(592 considered, 1 dropped) — same underlying hit, as expected (`domain_drift`
+is just `offDomain.size` from `findQualityFailures`).
+
+**Could not identify the specific row.** A domain-drift hit is a generation
+candidate rejected *before* insertion (`allDrops` filters it out of
+`generated` — see `generate-questions.ts:2664-2667`), so there is no
+`GeneratedQuestion` row to inspect after the fact; seeing what actually
+fired needs the Vercel runtime log line this gate emits
+(`[daily/generate-questions] off-domain questions detected`), which this
+session has no access to — the same limitation prior reviews hit trying to
+confirm whether OFF_DOMAIN ran on the original Joyce row. **Not acting on
+this** (no specific question to put to Josh yet — one hit isn't enough to
+tell true-positive from false-positive, and the mechanism already requires
+a confirmed second opinion before dropping, per the 2026-09-08 mitigation).
+Worth a Vercel log pull if anyone wants to see this one, and worth watching
+whether the next few hits keep landing clean.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 667 | 0 | 0 |
+| `domain_drift` | 667 | **1** | 0 |
+| `answer_leak_single_word` | 564 | 2 | 0 |
+| `answer_leak_any_token` | 481 | **64** | 0 |
+| `answer_shape` | 667 | 2 | 0 |
+| `quality` | 667 | 258 | 230 (unchanged since 2026-09-25) |
+
+`answer_leak_partial` is now at **25 consecutive clean days**, 667
+considered (up from 584) — still 0 drops. `domain_drift` breaks its own
+24-day streak as described above. `answer_leak_single_word` gained 83
+considered (481→564), no new drop (still 2). `answer_leak_any_token` gained
+10 more drops (54→64, 398→481 considered) — the recommended blind-labeling
+pass (open decision 6) has still **not** been run, now further past the
+~13-hit threshold than ever.
+
+**The 3 original `ContentReport` rows are still `status='open'`**
+(re-verified by id), now **26 days** since they were filed (2026-09-06).
+Not this doc's action item, but the age keeps growing.
+
+**Bank `still_servable` (is_duplicate=false): 2,606**, up from 2,544 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** `git log --since=2026-10-01`
+on `self-answering.ts`, `off-domain-second-opinion.ts`,
+`generate-questions.ts`, `sweep-bank-quality.ts`, and
+`rewrite-bank-demotions.ts` returns one commit (`#1739`, a daily-queue
+welcome-slot / house-pick-cap fix) that touches `generate-questions.ts` —
+confirmed by reading its diff directly: it changes `domainsForRound`
+selection (which KB domains lead a round), not `findQualityFailures`,
+`isDomainDriftDropEnabled`, or any answer-leak rule. Not relevant to this
+doc. The other three commits since yesterday (`#1740`, `#1738`, `#1737`)
+don't touch any tracked path either.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment. Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 64 of 481.
+
+### Next steps (unchanged, plus the new watch item)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 25+ clean days.
+2. **New:** watch whether `domain_drift` produces a second hit, and
+   whether anyone pulls the Vercel log for the 2026-10-01 hit to confirm
+   true vs. false positive.
+3. Watch `answer_leak_single_word` accumulate more data (still 2 of 564).
+4. **A blind-labeling pass on `answer_leak_any_token` remains due** (now 64
+   of 481) — recommended since 2026-09-25, still not run.
+5. The three open `ContentReport` rows remain unaddressed, now 26 days old.
+6. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

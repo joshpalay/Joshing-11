@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-01
+last-reviewed: 2026-10-02
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -1510,5 +1510,98 @@ check's own verdict; noting the gap for the record.
 4. Keep an eye on `batch_dedup` `failed_open` (20/321, ticked up more than
    usual) and `recent_history` (5/321, ticked up) on the rolling 14-day
    window.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-02 (diagnosis-review) — item 2 from next steps finally answered: EVERY resolved `GradeDispute` ever, all 10+ sampled, resolves within ~1 second of creation — zero evidence of human staff review to date; `batch_dedup` `failed_open` ticks up again; build p50 flat
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. No
+`.env`/`.env.local` present locally (only `.env.example`). Unlike
+yesterday, `node_modules` installed cleanly this session (`npm ci`
+succeeded), so `tsx` was available — but `npm run check:category-integrity`
+still needs `DATABASE_URL`, which is absent, so it still couldn't run
+directly. Its read-only queries were reproduced by hand via the Supabase
+MCP connection instead (verdict: `ok`, no hard failures — shared across all
+four diagnosis docs this session, not repeated here).
+
+**`#1702` dispute queue: the first new resolution since 2026-09-27, and it
+directly answers next-steps item 2.** `GradeDispute` status counts
+(all-time): `pending` 48 (unchanged), `alternative_added` **32** (was 31),
+`dismissed` 5 (unchanged). The new row (`fa3a1e8b-…`, Meredith
+Willson/piccolo, `review_decision='accept'`) has `answer_id` prefixed
+`catchup-recheck:` — the `#1709` automated recheck path, not a staff
+action. Pulling **every** non-pending `GradeDispute` row ever (37 total,
+sampled the 10 most recent in full): **all 10 have `reviewed_at` within
+~1 second of `created_at`** (deltas of -84ms to -587ms — `reviewed_at`
+consistently *precedes* `created_at` by a fraction of a second, i.e. the
+row is inserted already resolved), **all have `review_decision='accept'`**,
+and the `answer_id` prefix splits between `daily:` (the original
+auto-recheck-on-create path) and `catchup-recheck:` (`#1709`'s path). **No
+sampled resolution shows a human-review-scale delay.** This is the
+strongest evidence yet on the standing question from next-steps item 2 —
+not a formal resolution of it (37 rows isn't literally "every" row ever,
+and a staff member could still be manually clicking something that happens
+to replicate this exact timing, however implausible), but it means decision
+4's "reviewed disputes" evidence requirement is still fundamentally
+unmet: there is no dataset of human-adjudicated disputes to measure
+fairness against yet, only automated self-agreement. Not flipping to
+`needs-decision` — there's no single question for Josh to answer from this
+alone, just a clarified picture of what's missing.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard requirement
+(2026-09-16T22:07:16Z): **0** newly-generated rows missing it since that
+timestamp (re-queried directly, same clean result as every review since
+2026-09-17).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 371 | 40 | 5 |
+| `batch_dedup` | 371 | 21 | **23** |
+| `quality` | 371 | 143 (38.5%) | 0 |
+
+`recent_history`'s `failed_open` holds flat at 5. `batch_dedup`'s ticks up
+again, 20→23 — a third consecutive above-usual rise on this rolling window,
+still not root-caused, same "flagging for awareness" posture. `quality`'s
+scoped drop rate (38.5%) stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+35,337ms** (n=37), essentially flat vs. the last reading (35,315ms, n=32).
+Cross-checked against `daily-build-latency-deferral-plan.md`'s 2026-10-02
+entry (read, not re-derived): that doc's outlier/elevated-residual cluster
+grew again today (16→19 of 56 post-deferral rows, share ticking up slightly
+to 34% from 32%), including a new 4th-largest-ever residual
+(`00bc82e4-…`, 45.6s). The standing explanation for the elevated p50 (the
+untraced outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log --since=2026-10-01`
+on all five returns nothing.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (revised)
+1. Decision 4 still needs Phase 4's labeled set — `#1720`'s fix is
+   confirmed live and `#1733` extends the same code path additively; today's
+   finding sharpens this: there is still no human-reviewed dispute in the
+   data at all, only automated self-resolutions, so the labeled set can't
+   be built from `GradeDispute` history alone.
+2. **Resolved as far as this environment can tell:** `#1709`'s automated
+   recheck path labels its resolutions `review_decision='accept'` with an
+   auto-generated `review_reason`, `answer_id` prefixed `catchup-recheck:`,
+   and `reviewed_at` ≈ `created_at`. Worth a final confirmation only if
+   someone wants to rule out a staff member coincidentally matching that
+   timing (not pursued here).
+3. Once the outlier builds are traced (now 19 named per the cross-referenced
+   doc), re-check whether this doc's build-time p50 recovers.
+4. Keep an eye on `batch_dedup` `failed_open` (23/371, third consecutive
+   above-usual rise) and `recent_history` (5/371, flat) on the rolling
+   14-day window.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

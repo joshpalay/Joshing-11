@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-01
+last-reviewed: 2026-10-02
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2046,5 +2046,97 @@ questions.
    (82.9s, 2026-09-27).
 3. Watch for a third `deferred: false` occurrence — still only two on
    record, unchanged this reading.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-02 (diagnosis-review) — six new built rows; three new outliers including the 4th-largest residual on record; `#1738`/`#1739` touch tracked files but not `persistDailyQueue`; verify-script re-run still not done
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same
+as yesterday. `node_modules` installed cleanly this session, but
+`DATABASE_URL` is still absent, so `npm run check:build-latency` and `npm
+run verify:build-latency-anomaly` can't run directly here — the read-only
+half was reproduced by hand against the same `DailyBuildMetric` table
+(fetched all `outcome='built'` rows with `deferred IS NOT NULL`, computed
+`saved`/`bonus`/`residual` with the exact same formula as
+`scripts/build-latency-check.mjs`'s `bonusCostMs`, verified the n=50 median
+reproduces last review's 14,812.5ms exactly before trusting the new
+number). `verify:build-latency-anomaly` is write-capable and stays unrun
+per this doc's own §7 convention.
+
+**`DailyBuildMetric` totals:** `built=57` (1 baseline + 56 post-deferral, up
+from 51/50), `carry_forward=596`, `existing_queue=68`, `partial_carry_forward=5`.
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time.
+
+**Six new post-deferral rows since the last review** — four from the
+2026-10-01 17:05 UTC cron, two from an ad-hoc 2026-10-02 00:09/00:10 UTC
+build (same user, back-to-back):
+
+| build_id | deferred | span_ms | user_visible_ms | saved | bonus | residual |
+|---|---|---:|---:|---:|---:|---:|
+| `60cd9c31-…` | true | 64,091 | 37,406 | 26,685 | 866 | **25,819 — outlier-class** |
+| `00bc82e4-…` | true | 59,049 | 12,554 | 46,495 | 872 | **45,623 — outlier-class, 4th-largest on record** |
+| `4332883f-…` | true | 76,749 | 53,768 | 22,981 | 21,345 | 1,636 — large-bonus-itself shape, not an outlier |
+| `9f217fa4-…` | true | 54,791 | 26,698 | 28,093 | 741 | **27,352 — outlier-class** |
+| `b32cc3ac-…` | true | 44,441 | 43,189 | 1,252 | 547 | 705 — normal band |
+| `6cf8fc8e-…` | true | 18,199 | 16,882 | 1,317 | 545 | 772 — normal band |
+
+**Three of six are clean new outliers** (`60cd9c31-…`, `00bc82e4-…`,
+`9f217fa4-…`), all the established small-bonus/huge-residual shape.
+`00bc82e4-…`'s 45,623ms residual is the **4th-largest ever recorded**,
+behind only `90da8604-…` (82,878ms, 2026-09-27), `05589486-…` (60,575ms,
+2026-09-28), and `459c10fc-…` (54,109ms, 2026-09-28) — ranked by
+recomputing residuals across all 54 `deferred: true` rows, not estimated.
+The all-time high is unchanged. `4332883f-…` repeats the "large bonus
+itself, not a small-bonus/huge-residual case" shape seen in `8e98f96e-…`
+(09-30) and `93408f6e-…` (09-29) — correctly not added to the named
+outlier set. The two ad-hoc 2026-10-02 rows are both normal band.
+
+**This raises the outlier/elevated count from 16 of 50 (32%) to 19 of 56
+(34%)** — consistent with the established ~⅓ share, not a new trend.
+
+**No third `deferred: false` occurrence** — all six new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**Phase 3a (mechanism) holds** on all six new rows: `saved ≥` each row's
+own bonus-phase `generationMs`, including the closest margin yet
+(`4332883f-…`: 22,981 ≥ 21,345).
+
+**3b population: median saving 15,420.5ms** (n=56, up from 14,812.5ms at
+n=50) — reproduced the n=50 figure exactly before trusting this, per the
+environment note above.
+
+**Two commits touch this doc's tracked files since yesterday, neither
+touches `persistDailyQueue` or the race mechanism** — confirmed by reading
+both diffs directly, not by title:
+- `#1739` ("newly added topics get a welcome slot; at most one house pick
+  per Five") touches `queue-orchestrator.ts` — adds a house-pick cap
+  (`DAILY_QUEUE_MAX_HOUSE_PICKS`) and a welcome-slot domain-selection path.
+  Domain/slot selection, not the persist/conflict step.
+- `#1738` ("don't serve a fact that's already waiting on the home feed")
+  touches `db/queries/daily.ts` — adds a third source (`feedItems` waiting
+  cards) to `getRecentFactKeys`'s de-dup set. `persistDailyQueue` itself
+  (same file, line 1253) is untouched — confirmed `grep -c persistDailyQueue`
+  on both diffs returns 0.
+- `build-context.ts` unchanged. The other two commits since yesterday
+  (`#1740`, `#1737`) don't touch any of this doc's three tracked files.
+
+**Not run this pass** (write-capable, per this doc's own §7 convention):
+`npm run verify:build-latency-anomaly`'s Scenario A/B re-run against
+`#1734`'s conflict strategy — still outstanding from yesterday, now two
+days unconfirmed. Carrying forward as the leading next step again.
+
+**No decision-resolving change.** Status stays `active`. Question 4 (is the
+bonus worth its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now two reviews overdue.
+2. **Trace the now-nineteen outsized/elevated-residual builds** — needs
+   Vercel function logs. The all-time-high residual remains `90da8604-…`
+   (82.9s, 2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) is now 4th.
+3. Watch for a third `deferred: false` occurrence — still only two on
+   record.
 4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 5. Question 4 (is the bonus worth its cost) — unresolved.
