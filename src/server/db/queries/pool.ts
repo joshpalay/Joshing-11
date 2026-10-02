@@ -37,6 +37,14 @@ import { domainKey } from '@/lib/knowledge/domain-key';
  * Capped per domain so a deep domain cannot crowd the prompt; newest first,
  * matching the recency posture of the rest of the avoid list.
  */
+// A JS array interpolated straight into sql`` renders as a row tuple
+// `($1, $2)`, so `= ANY(${keys})` became `= ANY(($1, $2))` and Postgres
+// rejected it — both bank lookups below failed on every build (non-fatal, so
+// they silently ran with no avoid-list). Bind each key as its own parameter.
+function sqlList(values: string[]) {
+  return sql.join(values.map((value) => sql`${value}`), sql`, `);
+}
+
 export async function getServableBankFactKeys(
   domainKeys: string[],
   perDomainLimit = 60,
@@ -50,7 +58,7 @@ export async function getServableBankFactKeys(
              g.fact_key,
              ROW_NUMBER() OVER (PARTITION BY g.domain_key ORDER BY g.created_at DESC) AS rn
         FROM ${generatedQuestions} g
-       WHERE g.domain_key = ANY(${keys})
+       WHERE g.domain_key IN (${sqlList(keys)})
          AND g.is_duplicate = false
          AND g.fact_key IS NOT NULL
     ) ranked
@@ -85,7 +93,7 @@ export async function getServableBankFacts(
   const result = await db.execute(sql`
     SELECT g.domain_key, g.canonical_subcategory AS label, g.subject_entity, g.answer
       FROM ${generatedQuestions} g
-     WHERE g.domain_key = ANY(${keys})
+     WHERE g.domain_key IN (${sqlList(keys)})
        AND g.is_duplicate = false
     UNION ALL
     SELECT NULL AS domain_key, q.canonical_subcategory AS label, q.subject_entity, q.answer_text AS answer

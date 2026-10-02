@@ -6,8 +6,43 @@ import {
   domainWeeklyCap,
   dropCappedDomains,
   selectCustomDomainsForRound,
+  selectDryDomainsForRetry,
   weightedSampleWithoutReplacement,
 } from '@/server/daily/domain-selection';
+
+describe('selectDryDomainsForRetry', () => {
+  const keys = (...labels: string[]) => new Set(labels.map(domainKey));
+
+  it('re-offers only domains that yielded nothing, declared topics first', () => {
+    const picked = selectDryDomainsForRetry(
+      ['Disney Movies', 'Modern German History', 'Heinrich Von Kleist', 'World Cuisines'],
+      keys('Modern German History', 'Heinrich Von Kleist'),
+      2,
+      keys('World Cuisines'),
+    );
+    expect(picked).toEqual(['World Cuisines', 'Disney Movies']);
+  });
+
+  it('does nothing when the round is not short', () => {
+    expect(selectDryDomainsForRetry(['World Cuisines'], keys(), 0, keys())).toEqual([]);
+  });
+
+  it('caps at the shortfall and at the max', () => {
+    const offered = ['A', 'B', 'C', 'D', 'E'];
+    expect(selectDryDomainsForRetry(offered, keys(), 2, keys())).toEqual(['A', 'B']);
+    expect(selectDryDomainsForRetry(offered, keys(), 5, keys(), 3)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('matches yields across spelling variants and skips duplicate labels', () => {
+    const picked = selectDryDomainsForRetry(
+      ['World Cuisines', 'world cuisines', 'Popular Movies'],
+      keys('popular movies'),
+      3,
+      keys(),
+    );
+    expect(picked).toEqual(['World Cuisines']);
+  });
+});
 
 // Deterministic PRNG (mulberry32) so the statistical assertions below are
 // reproducible — no Math.random, no flake.
