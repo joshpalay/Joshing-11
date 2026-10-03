@@ -4,12 +4,12 @@ status: active
 opened: 2026-10-03
 last-reviewed: 2026-10-03
 owner: Josh
-related-pr: "#1743"
+related-pr: "#1743, #1744"
 ---
 
 # Diagnosis: loosened bank difficulty rule
 
-_Started 2026-10-03 · Owner: Josh · Working branch: `fix/bank-tier-supply`, PR #1743_
+_Started 2026-10-03 · Owner: Josh · Working branch: `feat/bank-difficulty-loosening`, PR #1744 (miss reasons: #1743)_
 
 **This is an experiment being measured, not a settled rule.** On 2026-10-03 we
 deliberately LOOSENED the "never talk down to the player" bank rule so the
@@ -28,8 +28,8 @@ changed, how to turn it off, and what the daily `/diagnosis-review` must check.
   **56%** had unused stock on the topic, but only at a difficulty the ±1 tier
   ladder won't reach (typically: specialist asked, only accessible left);
   **30%** were topics the player had answered out; **15%** were empty topics.
-- PR #1743 first fixed the misleading `missReason` telemetry (it used to guess
-  from the ladder's shape), then added the loosened rule below.
+- PR #1743 (merged) fixed the misleading `missReason` telemetry (it used to guess
+  from the ladder's shape). PR #1744 adds the loosened rule below.
 
 ## 2. What changed (the loosening)
 
@@ -68,8 +68,8 @@ changed, how to turn it off, and what the daily `/diagnosis-review` must check.
 
 Run against prod with the usual read-only pattern (`node --env-file=.env
 node_modules/tsx/dist/cli.mjs <script>.ts`, PowerShell). Rows recorded before
-#1743 deployed have no `loosened` flag and guessed `missReason` labels — only
-compare rows after the deploy date.
+#1743 deployed have guessed `missReason` labels, and rows before #1744 deployed
+can't carry the `loosened` flag — only compare rows after those deploy dates.
 
 **Q1 — is it firing, and did the bank hit rate move?**
 ```sql
@@ -147,6 +147,6 @@ whether the easier questions felt wrong.
 ## Updates
 
 ### 2026-10-03
-Opened. Loosened rule built on `fix/bank-tier-supply` (PR #1743) with the
+Opened. Loosened rule built on `feat/bank-difficulty-loosening` (PR #1744) with the
 off switch and per-pick flag. Queries Q1–Q3 run read-only against prod and
-return the §4 baseline. Nothing live until #1743 merges and deploys.
+return the §4 baseline. Nothing live until #1744 merges and deploys.
