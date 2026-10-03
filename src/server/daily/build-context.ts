@@ -26,8 +26,10 @@ import { randomUUID } from 'node:crypto';
  * `undefined` for every non-build caller — so unrelated scopes keep writing a
  * NULL build_id exactly as before.
  *
- * PURE BOOKKEEPING. Nothing here changes what gets generated or served. The
- * counters are incremented from the build path and read once at the end.
+ * PURE BOOKKEEPING, with one exception. The counters are incremented from the
+ * build path and read once at the end. The exception is `loosenedBankPicks`,
+ * which also enforces the per-build cap on loosened (two-tier) bank picks —
+ * the build is the unit the cap is defined over, so it lives here.
  */
 
 export type BuildRoundSpan = {
@@ -77,6 +79,12 @@ export type BankAttempt = {
   missReason: BankMissReason | null;
   tierRequested: string;
   tierServed: string | null;
+  /**
+   * True when this hit came from the LOOSENED difficulty rule (2026-10-03,
+   * diagnosis/bank-difficulty-loosening.md): no stock within one tier, so the
+   * pick jumped two tiers. Absent on every other attempt.
+   */
+  loosened?: boolean;
 };
 
 export type DailyBuildContext = {
@@ -88,6 +96,8 @@ export type DailyBuildContext = {
   generateCallCount: number;
   rounds: BuildRoundSpan[];
   bankAttempts: BankAttempt[];
+  /** Bank picks served under the loosened two-tier rule; capped per build. */
+  loosenedBankPicks: number;
   /**
    * Counterfactual for A2 (§3). Stamped from the IN-MEMORY assembly the moment
    * gated slots first reach DAILY_QUEUE_MIN_SIZE — deliberately NOT from the
@@ -186,6 +196,7 @@ export function runInBuildContext<T>(
     generateCallCount: 0,
     rounds: [],
     bankAttempts: [],
+    loosenedBankPicks: 0,
     gatedFloorReachedMs: null,
     userVisibleMs: null,
     deferred: null,
@@ -226,6 +237,20 @@ export function noteRound(span: BuildRoundSpan): void {
 export function noteBankAttempt(attempt: BankAttempt): void {
   const ctx = storage.getStore();
   if (ctx) ctx.bankAttempts.push(attempt);
+}
+
+/**
+ * Loosened bank picks this build has already used, or null outside a build.
+ * Null means "don't loosen": the cap is per build, and a pick with no build to
+ * count against could never be held to it.
+ */
+export function loosenedBankPicksSoFar(): number | null {
+  return storage.getStore()?.loosenedBankPicks ?? null;
+}
+
+export function noteLoosenedBankPick(): void {
+  const ctx = storage.getStore();
+  if (ctx) ctx.loosenedBankPicks += 1;
 }
 
 /**
