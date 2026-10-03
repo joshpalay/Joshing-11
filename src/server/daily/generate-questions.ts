@@ -41,6 +41,7 @@ import {
   getRecentSubAnglesByDomain,
   getRecentShapesByDomain,
   getRecentSubjectsByDomain,
+  classifyBankMiss,
   normalizeQuestionText,
   pickBankSource,
   type AnsweredCanonicalTextEntry,
@@ -117,7 +118,12 @@ import { resolveDailyBasePoints } from './types';
 import { SINGLE_ANSWER_STYLE_EXEMPLAR_BLOCK, STYLE_EXEMPLAR_BLOCK } from './exemplars';
 import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
-import { noteBankAttempt, noteGenerateCall } from '@/server/daily/build-context';
+import {
+  currentBuildContext,
+  noteBankAttempt,
+  noteGenerateCall,
+  type BankMissReason,
+} from '@/server/daily/build-context';
 
 // Cap the recent question-text block at this many entries inside the prompt.
 // The full recent history (up to 200) is still used to derive the fact-key
@@ -3778,12 +3784,25 @@ async function pickBankPicksForDomains(
     // (71 of 87 declared topics have >=3 verified questions) yet only ~11% of
     // builds avoid generation entirely -- something eats the difference. The
     // two candidates are the difficulty-tier match and the uncapped per-viewer
-    // answered-fact exclusion; missReason is what separates them, and neither
-    // is knowable from the database today.
+    // answered-fact exclusion; missReason is what separates them. It is
+    // diagnosed from a count of the stock actually there -- the earlier
+    // ladder-shape guess labelled every declared-domain miss 'tier' and never
+    // emitted 'fact_history' (2026-10-03 re-check: ~56% tier, ~30% answered-out,
+    // ~15% empty). Only inside a build: noteBankAttempt is a no-op elsewhere,
+    // so the extra count would be wasted.
+    let missReason: BankMissReason | null = null;
+    if (!source && currentBuildContext()) {
+      try {
+        missReason = await classifyBankMiss(userId, domain, ladder);
+      } catch {
+        // Telemetry must never cost the player a build.
+        missReason = 'unknown';
+      }
+    }
     noteBankAttempt({
       domain,
       outcome: source ? 'hit' : 'miss',
-      missReason: source ? null : ladder.length > 1 ? 'tier' : 'no_stock',
+      missReason,
       tierRequested: difficulty,
       tierServed: source ? servedTier : null,
     });
