@@ -2320,6 +2320,7 @@ export const dailyBuildMetrics = pgTable(
           missReason: 'tier' | 'fact_history' | 'no_stock' | 'filtered' | 'unknown' | null;
           tierRequested: string;
           tierServed: string | null;
+          loosened?: boolean;
         }>
       >()
       .notNull()

@@ -120,8 +120,10 @@ import { askToAnswerBatch, resolveMachineTrustTier } from './ask-to-answer';
 import { enrichAcceptableVariants, mergeVariants } from './enrich-variants';
 import {
   currentBuildContext,
+  loosenedBankPicksSoFar,
   noteBankAttempt,
   noteGenerateCall,
+  noteLoosenedBankPick,
   type BankMissReason,
 } from '@/server/daily/build-context';
 
@@ -3700,6 +3702,37 @@ export function bankTierLadder(target: BankDifficulty, floor: BankDifficulty): B
   return ladder;
 }
 
+// LOOSENED difficulty rule (Josh, 2026-10-03; tracked in
+// diagnosis/bank-difficulty-loosening.md). The ±1 ladder above left ~56% of
+// Daily Five bank misses unserved even though unused stock sat on the topic one
+// tier further away (typically: specialist asked, only accessible left) — and
+// each such miss pays for a fresh generation. When the ladder comes back empty,
+// a build may now take up to this many picks from the tiers the ladder skipped
+// (still never below the domain's floor). Every such pick is recorded as
+// `loosened: true` on its bank attempt. Set BANK_LOOSE_TIER_MAX_PER_BUILD=0 to
+// restore the strict rule.
+export function bankLooseTierMaxPerBuild(): number {
+  const raw = process.env.BANK_LOOSE_TIER_MAX_PER_BUILD?.trim();
+  if (raw === undefined || raw === '') return 1;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 1;
+}
+
+// The tiers the ±1 ladder skipped that the loosened rule may reach: nearest to
+// the target first, never below the floor.
+export function bankLooseTiers(
+  target: BankDifficulty,
+  floor: BankDifficulty,
+  ladder: readonly BankDifficulty[],
+): BankDifficulty[] {
+  const t = BANK_TIER_ORDER.indexOf(target);
+  const f = BANK_TIER_ORDER.indexOf(floor);
+  const distance = (tier: BankDifficulty) => Math.abs(BANK_TIER_ORDER.indexOf(tier) - t);
+  return BANK_TIER_ORDER.filter((tier, i) => !ladder.includes(tier) && (i > t || i >= f)).sort(
+    (a, b) => distance(a) - distance(b),
+  );
+}
+
 async function pickBankPicksForDomains(
   userId: string,
   domains: string[],
@@ -3735,42 +3768,73 @@ async function pickBankPicksForDomains(
     const ladder = floor ? bankTierLadder(difficulty, floor) : [difficulty];
     let domainRejects = 0;
 
-    let source: BankSource | null = null;
-    let servedTier: BankDifficulty = difficulty;
     // Quality-reject a bank candidate and ask for the NEXT one rather than
     // giving up on the domain: a single bad row in stock shouldn't cost the
     // player a slot. Rejected fact_keys join avoidFactKeys, which
     // pickBankSource already honours, so the same row can't come back and the
     // loop always terminates (BankSource.factKey is non-nullable).
-    tierLadder: for (const tier of ladder) {
-      for (;;) {
-        const candidate = await pickBankSource(
-          userId,
-          domain,
-          tier,
-          avoidFactKeys,
-          avoidQuestionTexts,
-        ).catch(() => null);
-        if (!candidate) break; // no stock left at this tier — try the next one
-        bankCandidatesConsidered += 1;
-        const defect = findBankSourceDefect({ ...candidate, topicLabel: domain });
-        if (!defect) {
-          source = candidate;
-          servedTier = tier;
-          break tierLadder;
+    const searchTiers = async (
+      tiers: readonly BankDifficulty[],
+    ): Promise<{ source: BankSource; tier: BankDifficulty } | null> => {
+      for (const tier of tiers) {
+        for (;;) {
+          const candidate = await pickBankSource(
+            userId,
+            domain,
+            tier,
+            avoidFactKeys,
+            avoidQuestionTexts,
+          ).catch(() => null);
+          if (!candidate) break; // no stock left at this tier — try the next one
+          bankCandidatesConsidered += 1;
+          const defect = findBankSourceDefect({ ...candidate, topicLabel: domain });
+          if (!defect) return { source: candidate, tier };
+          bankCandidatesRejected += 1;
+          console.warn('[daily/generate-questions] bank-pick rejected by quality gate', {
+            domain,
+            tier,
+            factKey: candidate.factKey,
+            defect,
+          });
+          avoidFactKeys.add(candidate.factKey);
+          domainRejects += 1;
+          if (domainRejects >= MAX_BANK_QUALITY_REJECTS_PER_DOMAIN) return null;
         }
-        bankCandidatesRejected += 1;
-        console.warn('[daily/generate-questions] bank-pick rejected by quality gate', {
-          domain,
-          tier,
-          factKey: candidate.factKey,
-          defect,
-        });
-        avoidFactKeys.add(candidate.factKey);
-        domainRejects += 1;
-        if (domainRejects >= MAX_BANK_QUALITY_REJECTS_PER_DOMAIN) break tierLadder;
+      }
+      return null;
+    };
+    let found = await searchTiers(ladder);
+
+    // Loosened rule (see bankLooseTierMaxPerBuild). Floors only — the +2 path
+    // passes none, so its accessibility target stays hard. Counted per build;
+    // outside a build there's nothing to cap against, so it stays strict.
+    let loosened = false;
+    let triedTiers: readonly BankDifficulty[] = ladder;
+    const usedLoose = loosenedBankPicksSoFar();
+    if (
+      !found &&
+      floor &&
+      usedLoose !== null &&
+      usedLoose < bankLooseTierMaxPerBuild() &&
+      domainRejects < MAX_BANK_QUALITY_REJECTS_PER_DOMAIN
+    ) {
+      const looseTiers = bankLooseTiers(difficulty, floor, ladder);
+      if (looseTiers.length > 0) {
+        triedTiers = [...ladder, ...looseTiers];
+        found = await searchTiers(looseTiers);
+        if (found) {
+          loosened = true;
+          noteLoosenedBankPick();
+          console.info('[daily/bank-loosened]', {
+            domain,
+            tierRequested: difficulty,
+            tierServed: found.tier,
+          });
+        }
       }
     }
+    const source: BankSource | null = found?.source ?? null;
+    const servedTier: BankDifficulty = found?.tier ?? difficulty;
     // BP-7 Phase-3 telemetry: per-domain hit / fall-through, so bank hit rate
     // and the value of flipping retrieval refill on are measurable from logs.
     console.info('[daily/bank-telemetry]', {
@@ -3793,7 +3857,7 @@ async function pickBankPicksForDomains(
     let missReason: BankMissReason | null = null;
     if (!source && currentBuildContext()) {
       try {
-        missReason = await classifyBankMiss(userId, domain, ladder);
+        missReason = await classifyBankMiss(userId, domain, triedTiers);
       } catch {
         // Telemetry must never cost the player a build.
         missReason = 'unknown';
@@ -3805,6 +3869,7 @@ async function pickBankPicksForDomains(
       missReason,
       tierRequested: difficulty,
       tierServed: source ? servedTier : null,
+      ...(loosened ? { loosened: true } : {}),
     });
     if (!source) continue;
     if (isGenericSubcategory(source.canonicalSubcategory)) continue;
