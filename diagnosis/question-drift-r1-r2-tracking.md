@@ -2,9 +2,9 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-10-02
+last-reviewed: 2026-10-03
 owner: Josh
-related-pr: "#1654, #1662, #1666, #1683, #1698"
+related-pr: "#1654, #1662, #1666, #1683, #1698, #1742"
 ---
 
 # Diagnosis: Question drift — impact of R1 (accessible fan-salience) and R2 (no self-defining setups)
@@ -1985,5 +1985,116 @@ seventh straight review.
    resolved (accept) regardless of which way it goes.
 5. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked, now 14 days past its
+   checkpoint date.
+6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).
+
+### 2026-10-03 (diagnosis-review) — the isolated `failed_open` on the shared `quality` gate recurs for the first time (now 2, see cross-referenced docs for the same event); a new PR edits `SYSTEM_PROMPT` with a food-domain-specific definition-supplied rule, directly in R2-b's territory; accessible share eases back into the noise band; Phase 2 hand read overdue for an eighth straight review
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session, same as
+the last several reviews. Deploy was 2026-09-11T19:14:09Z, so this review
+lands at deploy+~21.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-10-02 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 411 | **419** | — | ordinary generation (+8) |
+| Mean words/question | 29.0 | **29.1** | ≤24 | still barely moved |
+| Rows over 25 words | 58% | **59%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 56% | **52%** | 30-45% | still above target band — eased back into the established high-40s/low-50s noise band after yesterday's one-off high |
+
+**Quality-gate drop rate since deploy:** 250/648 = **38.6%** (considered
+648, up from 601; dropped 250, up from 234) — inside the 35-45% acceptable
+band, essentially flat versus the last reading (38.9%). `difficulty_floor`:
+3/648 = **0.46%**, well under the 5% stop condition, flat.
+
+**`failed_open` recurs for the first time — the "seven straight reviews,
+unrecurred" streak is over.** This doc's own Phase 1 query (gate IN
+`quality`, `difficulty_floor`, `answer_shape`, no scope filter, cumulative
+since deploy) now reads `quality` `failed_open: 2`, up from the single
+2026-09-25 event every prior reading since then had called "unrecurred."
+**This is not a second, independent incident** — it is the same
+`day=2026-10-02, scope=daily_build` event that
+`answer-leak-domain-drift-plan.md` and `question-lifecycle-quality-plan.md`
+(both reviewed this same session) traced in full: 61 considered, 22
+dropped, 1 failed_open on the shared Haiku `quality` call, the first ever
+in the `daily_build` scope (the original 2026-09-25 event was
+`non_player`-scoped). Not re-analyzing it a third time here — see either of
+those two entries for the detail. `answer_shape` stays 0/648.
+
+**Phase 3 (correct-rate) — the favorable gap narrows again, still
+positive.** Accessible-tier mean `empirical_correct_rate`, post-deploy
+cohort now **0.787** (75 rows/130 answers, up from 126 answers), pre-deploy
+cohort **0.746** (78 rows/181 answers, up from 75/169 — the pre-deploy
+population keeps moving as more answers land on old rows, this time both
+its row count and rate ticked up). Post-deploy now exceeds pre-deploy by
+**4.1 points** (was 4.3, then 6.1, then 5.4) — the narrowing that started
+2026-10-02 continues for a second reading, but the gap is still on the
+favorable side of zero. Per Josh's 2026-09-22 resolution of decision 3,
+this does not call "accept" into question; not reopening decision 3.
+
+**New PR since the last review, directly relevant to R2-b: `#1742`**
+("fix(daily): thin topics get a second try; food prompt; bank lookups;
+invite copy"), merged 2026-10-02T18:15:29-04:00. Read the diff directly —
+two things matter here:
+
+1. **A new FOOD/CUISINE paragraph in `SYSTEM_PROMPT`** (line 258, well
+   inside the ONE CLEAN ANSWER / Rule 3c block this doc tracks), naming
+   "describe the dish, then ask its name" as the default failure shape for
+   food domains specifically, with its own BAD/GOOD examples. This is a
+   domain-targeted tightening of exactly the rule R2-b installed
+   (DO NOT DEFINE YOUR OWN ANSWER) — not an eighth numbered prescription,
+   same framing as how `#1698`'s example-domain swap was logged on
+   2026-09-17. Worth naming because food domains have a documented history
+   in this repo's sibling doc (`answer-leak-domain-drift-plan.md`'s
+   2026-09-06 entries: the "Tears"/onion-cutting self-answering defect was
+   a Food Chemistry row) — this is the generator-prompt-side companion to
+   that gate-side history, landing inside this doc's still-open Phase 2
+   measurement window. Added `#1742` to this file's `related-pr`
+   frontmatter.
+2. **A new "dry-domain retry"** (`isDryDomainRetryEnabled`,
+   `selectDryDomainsForRetry`): when a round comes back with domains that
+   yielded nothing, each dry domain gets one more generation attempt before
+   the round closes. This is a supply-side change, not a prompt-rule
+   change — it could subtly shift which domains' rows end up in future
+   Phase 1/2 samples (a domain that previously fell through now gets a
+   second try), but it does not touch `SYSTEM_PROMPT`'s R1/R2/R3/R9 text or
+   `QUALITY_GATE_SYSTEM_PROMPT`. Flagging for awareness, not treating as a
+   measurement-window confound by itself.
+
+**Phase 2's hand read remains due and was again not performed this
+pass** — same out-of-scope reasoning as every prior entry (needs a seeded
+random sample and a human labeller; this skill's own instruction is
+reconnaissance only). Now due for an **eighth** consecutive review without
+being run.
+
+**No other new relevant code:** `git log --since=2026-10-02` on
+`adaptive-difficulty.ts` returns nothing; the only other commit since
+yesterday (`#1741`) touches catch-up/feed/knowledge surfaces, not
+generation or the quality gate.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-10-02 left them** (decision 3 already resolved 2026-09-22).
+Status stays `active`. Phase 2's hand read is due and unperformed, now for
+an eighth straight review.
+
+### Next steps (unchanged)
+1. **Leading item, now overdue for an eighth review:** Phase 2's hand read
+   is due (both the 14-day date mark and the 200-row mark passed as of
+   2026-09-26) but has not been performed — needs a seeded random sample and
+   a human labeller, per §4 Phase 2.
+2. **Revised:** `failed_open` on the shared `quality` gate has now
+   recurred once (2026-10-02, `daily_build` scope, a different scope than
+   the original 2026-09-25 `non_player`-scope hit) — watch whether it
+   recurs again.
+3. Keep watching accessible share — 52% this reading, back in the
+   established noise band after yesterday's 56% high.
+4. Watch whether Phase 3's gap (post now +4.1pts over pre, narrowing for a
+   second straight reading) recovers or keeps narrowing; decision 3 stays
+   resolved (accept) regardless of which way it goes.
+5. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked, now 15 days past its
    checkpoint date.
 6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

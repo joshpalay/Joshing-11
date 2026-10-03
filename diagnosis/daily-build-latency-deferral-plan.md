@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-02
+last-reviewed: 2026-10-03
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2136,6 +2136,97 @@ bonus worth its cost) remains open and unresolved.
 2. **Trace the now-nineteen outsized/elevated-residual builds** — needs
    Vercel function logs. The all-time-high residual remains `90da8604-…`
    (82.9s, 2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) is now 4th.
+3. Watch for a third `deferred: false` occurrence — still only two on
+   record.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-03 (diagnosis-review) — four new built rows from the 2026-10-02 cron, two more outliers; two previously-tracked rows have vanished from the table entirely (same cascade-delete shape as the 2026-09-06 "Rue Prova" incident); `verify:build-latency-anomaly` now three reviews overdue
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installs cleanly but `DATABASE_URL` is still absent, so
+`npm run check:build-latency` can't run directly — reproduced its exact
+read-only computation by hand: pulled every `outcome='built'` row (all
+columns needed: `span_ms`, `user_visible_ms`, `rounds`) via the Supabase
+MCP connection and ran the identical `saved = span_ms - user_visible_ms`,
+`bonus = Σ rounds[phase='bonus'].generationMs`, `residual = saved - bonus`
+arithmetic in a disposable local script, same formula `build-latency-check.mjs`
+uses. `verify:build-latency-anomaly` is write-capable and stays unrun per
+this doc's own §7 convention — now overdue for a **third** consecutive
+review.
+
+**`DailyBuildMetric` totals:** `built=59` (1 pre-deferral baseline + 2
+`deferred:false` + 56 `deferred:true`), `carry_forward=618`,
+`existing_queue=68`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Four new rows, all from the 2026-10-02 17:05 UTC cron:**
+
+| build_id | span_ms | user_visible_ms | saved | bonus | residual |
+|---|---:|---:|---:|---:|---:|
+| `60cd9c31-…`* | — | — | — | — | *(already counted last review)* |
+| `dd795b32-…` | 55,225 | 26,921 | 28,304 | 875 | **27,429 — outlier-class** |
+| `b6477f44-…` | 58,302 | 43,353 | 14,949 | 12,635 | 2,314 — large-bonus-itself shape, not an outlier |
+| `0a04d863-…` | 47,445 | 22,196 | 25,249 | 1,026 | **24,223 — outlier-class** |
+| `c552e482-…` | 30,052 | 22,874 | 7,178 | 6,341 | 837 — normal band, closest Phase-3a margin yet |
+
+**Two of four are clean new outliers** (`dd795b32-…`, `0a04d863-…`), the
+established small-bonus/huge-residual shape. `b6477f44-…` repeats the
+"large bonus itself, not small-bonus/huge-residual" shape seen before
+(`4332883f-…` 10-01, `8e98f96e-…` 09-30). `c552e482-…`'s margin
+(7,178 ≥ 6,341, 837ms) is the tightest Phase-3a margin on record, edging out
+`4332883f-…`'s 1,636ms from 2026-10-01 — Phase 3a (saved ≥ that row's own
+bonus `generationMs`) still holds on every row, including this one.
+
+**A data-integrity oddity, flagged rather than silently absorbed into the
+numbers:** yesterday's review listed two ad-hoc 2026-10-02 00:09/00:10 UTC
+rows (truncated ids `b32cc3ac-…`, `6cf8fc8e-…`, both normal-band, saved
+1,252ms/1,317ms). **Neither exists in `DailyBuildMetric` any more** — a
+direct `LIKE` search on both id prefixes returns zero rows. The dataset's
+total `deferred:true` count is unchanged at 56 (same as yesterday) despite
+four new arrivals, which arithmetically means at least two rows besides
+these were also removed between reviews; only these two were specifically
+confirmed missing, the rest not individually traced. This is the same
+shape as the 2026-09-06 "Rue Prova" incident documented earlier in this
+file: `DailyBuildMetric.user_id` cascades on account deletion, so a
+disposable test account's builds can vanish from this doc's evidence base
+without warning. Not investigated further this pass (reconnaissance only,
+and the vanished rows were normal-band, not load-bearing for any open
+question) — noting it so a future reviewer isn't confused by the
+non-monotonic row count.
+
+**3b population: median saving 16,704.5ms** (n=56, up from 15,420.5ms also
+at n=56 — same count, different composition per the note above).
+
+**Outlier/elevated count (residual ≥ 15,000ms): 19 of 56 (34%)** —
+numerically unchanged from yesterday's reading, though two of today's new
+rows are newly in the set (`dd795b32-…`, `0a04d863-…`), implying others
+aged out with the vanished rows above. All-time high residual is still
+`90da8604-…` (82,878ms, 2026-09-27); `00bc82e4-…` (45,623ms, 2026-10-01)
+holds 4th place.
+
+**No third `deferred: false` occurrence** — all four new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**No commits touch this doc's tracked files since yesterday.** `#1741`
+touches `src/server/db/queries/daily.ts` but only the catch-up/hidden-question
+path — zero references to `persistDailyQueue` (confirmed by grep on the
+diff). `#1742` touches `generate-questions.ts`, `domain-selection.ts`, and
+`pool.ts` — none of this doc's three tracked files
+(`queue-orchestrator.ts`, `db/queries/daily.ts`'s persist logic,
+`build-context.ts`).
+
+**No decision-resolving change.** Status stays `active`. Question 4 (is the
+bonus worth its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **three** reviews overdue.
+2. Trace the nineteen outsized/elevated-residual builds — needs Vercel
+   function logs. All-time-high residual still `90da8604-…` (82.9s,
+   2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
 3. Watch for a third `deferred: false` occurrence — still only two on
    record.
 4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.

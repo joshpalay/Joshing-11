@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-02
+last-reviewed: 2026-10-03
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -2677,5 +2677,101 @@ recommended-but-unrun blind-labeling pass, now at 64 of 481.
 4. **A blind-labeling pass on `answer_leak_any_token` remains due** (now 64
    of 481) — recommended since 2026-09-25, still not run.
 5. The three open `ContentReport` rows remain unaddressed, now 26 days old.
+6. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-03 (diagnosis-review) — the shared `quality` gate's `failed_open` ticks up for the first time since 2026-09-25, and this time on PLAYER-FACING traffic, not the `non_player` scope of the original event; everything else incremental
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installed cleanly (`npm ci`), but `DATABASE_URL` is still
+absent from `.env` (only `.env.example` present, same as every review since
+2026-09-12), so `npm run check:category-integrity` still can't run
+directly. Reproduced it faithfully instead: pulled the script's exact five
+read-only queries by hand via the Supabase MCP connection and fed the
+results through the real `analyzeCategoryIntegrity` function (imported
+directly, not reimplemented) via a throwaway `tsx` script, deleted after
+running. **Verdict: `ok`** — zero hard failures (`nodeKeyMismatches: 0`,
+`orphanEdges: 0`, `hasCycle: false`, `graphSourceMerges: 0`). Soft findings
+only: 4 `splitKeys` (capitalization/apostrophe variants — "Classic
+Childrens' Television" with a straight vs. curly apostrophe, "Greek
+Mythology"/"Greek mythology", "Human Anatomy & Physiology"/"...and
+Physiology", "Spy School series"/"Spy School Series") and 3
+`bankKeyMismatches` (Rent/Renaissance-Counterpoint rows folded into a
+different domain's key) — same shape of pre-existing, non-urgent findings
+this check has always surfaced, not new.
+
+**The headline finding: `quality`'s cumulative `failed_open` ticked 230→231
+(since 2026-09-07), and tracing the new event shows it's a genuinely new
+kind, not a repeat.** Every prior review's "still 230, unchanged since
+2026-09-25" referred to one `non_player`-scope event. The new one is
+`day=2026-10-02, scope=daily_build, considered=61, dropped=22,
+failed_open=1` — **the first `failed_open` on this gate in the
+`daily_build` scope (i.e., real player-facing generation traffic) since
+tracking began.** 1 of 61 calls on an otherwise-ordinary day is consistent
+with a transient Haiku API hiccup, not a pattern — but flagging it plainly
+since this is a different scope than the one every prior entry has been
+reassuring about. (This same event also shows up in
+`question-lifecycle-quality-plan.md`'s and `question-drift-r1-r2-tracking.md`'s
+trailing/cumulative `quality` counters, reviewed the same session — not
+repeating the detail there.)
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 714 | 0 | 0 |
+| `domain_drift` | 714 | 1 | 0 |
+| `answer_leak_single_word` | 611 | 2 | 0 |
+| `answer_leak_any_token` | 528 | **67** | 0 |
+| `answer_shape` | 714 | 2 | 0 |
+| `quality` | 714 | 274 | **231** (new, see above) |
+
+`answer_leak_partial` now at **26 consecutive clean days**, 714 considered
+(up from 667) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 667→714 considered) — nobody has pulled the Vercel log
+for the 2026-10-01 hit yet. `answer_leak_single_word` gained 47 considered
+(564→611), no new drop. `answer_leak_any_token` gained 3 more drops (64→67,
+481→528 considered) — the recommended blind-labeling pass (decision 6)
+remains unrun, now further past the ~13-hit threshold than ever.
+
+**The 3 original `ContentReport` rows, re-verified by id, are all still
+`status='open'`** — now **27 days** since they were filed (2026-09-06).
+
+**Bank `still_servable` (is_duplicate=false): 2,615**, up from 2,606 —
+ordinary generation.
+
+**No new code touching this doc's tracked paths.** `git log --since=2026-10-02`
+shows two new commits, `#1741` and `#1742`. Read both diffs directly: `#1741`
+touches `src/server/db/queries/daily.ts` but only the catch-up/hidden-question
+path (`isHiddenSlot`, `getCatchupQuestions`) — zero references to
+`persistDailyQueue` or anything this doc tracks. `#1742` touches
+`src/server/daily/generate-questions.ts` — adds a "dry-domain retry" (one
+more generation attempt for domains that came back empty) and a new
+FOOD/CUISINE paragraph in `SYSTEM_PROMPT` — confirmed via grep that neither
+touches `isDomainDriftDropEnabled`, `findQualityFailures`, or any
+answer-leak/self-answering rule. The new FOOD text is relevant to
+`question-drift-r1-r2-tracking.md` (R2-b territory), not this doc; flagged
+there instead. Neither `self-answering.ts`, `off-domain-second-opinion.ts`,
+`sweep-bank-quality.ts`, nor `rewrite-bank-demotions.ts` changed.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment (`.env` has the key present but empty, same as always).
+Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were.
+
+### Next steps (unchanged, plus the new watch item)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 26+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. **New:** watch whether the `quality` gate's `daily_build`-scope
+   `failed_open` (now 1, first-ever in this scope) recurs or stays isolated.
+4. A blind-labeling pass on `answer_leak_any_token` remains due (now 67 of
+   528) — recommended since 2026-09-25, still not run.
+5. The three open `ContentReport` rows remain unaddressed, now 27 days old.
 6. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
