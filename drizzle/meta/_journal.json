@@ -1058,6 +1058,27 @@
       "when": 1789074000000,
       "tag": "0150_weekly_friends_digest",
       "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1791050702321,
+      "tag": "0151_cassian_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1791051720256,
+      "tag": "0152_cassian_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1791052800000,
+      "tag": "0153_cassian_panel_notes",
+      "breakpoints": true
     }
   ]
 }

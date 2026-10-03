@@ -1,0 +1,61 @@
+{
+  "runId": "cassian-pilot-2026-10-03",
+  "status": "machine_screened_human_review_pending",
+  "topics": 12,
+  "candidateSnapshots": 24,
+  "arms": [
+    {
+      "arm": "baseline",
+      "requested": 12,
+      "parsed": 12,
+      "coreGatePassed": 6,
+      "held": 6,
+      "parseFailed": 0,
+      "withSource": 12,
+      "humanReviewed": 0
+    },
+    {
+      "arm": "candidate",
+      "requested": 12,
+      "parsed": 12,
+      "coreGatePassed": 4,
+      "held": 8,
+      "parseFailed": 0,
+      "withSource": 12,
+      "humanReviewed": 0
+    }
+  ],
+  "stages": [
+    {
+      "scope": "source",
+      "calls": 12,
+      "usd": 1.319228,
+      "p50Ms": 6893,
+      "p95Ms": 9372
+    },
+    {
+      "scope": "writer",
+      "calls": 24,
+      "usd": 0.256178,
+      "p50Ms": 3123,
+      "p95Ms": 3915
+    },
+    {
+      "scope": "quality",
+      "calls": 24,
+      "usd": 0.127534,
+      "p50Ms": 2145,
+      "p95Ms": 2625
+    },
+    {
+      "scope": "factual",
+      "calls": 24,
+      "usd": 0.197073,
+      "p50Ms": 2415,
+      "p95Ms": 5418
+    }
+  ],
+  "totalUsd": 1.900013,
+  "reservedUsd": 0,
+  "limitation": "Core gates only; no human quality verdict or live-player topic-to-ready timing."
+}

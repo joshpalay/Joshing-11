@@ -18,7 +18,8 @@ import {
   AnswerSubmitError,
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
-import { GeometricProgress } from '@/components/play/GeometricProgress';
+  import { GeometricProgress } from '@/components/play/GeometricProgress';
+  import { CassianReviewClient } from '@/app/admin/cassian/review-client';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -550,6 +551,15 @@ export default function DailyPage() {
       : DAILY_QUEUE_SIZE;
   const bonusDotCount = queue ? getBonusCount(queue.slots) : 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
+  const [cassianVisible, setCassianVisible] = useState(false);
+  useEffect(() => {
+    if (!allDone || loading || error) return;
+    let cancelled = false;
+    fetch('/api/admin/cassian/next', { cache: 'no-store', credentials: 'same-origin' })
+      .then((response) => { if (!cancelled) setCassianVisible(response.ok); })
+      .catch(() => { if (!cancelled) setCassianVisible(false); });
+    return () => { cancelled = true; };
+  }, [allDone, loading, error]);
 
   // Defense-in-depth against a partial queue snapshot (B-DAILY-PARTIAL-QUEUE-01).
   // If the round looks complete, re-fetch once to confirm the server agrees. A
@@ -1248,6 +1258,17 @@ export default function DailyPage() {
             reportSurface="daily_five"
             activeQuestionId={currentSlot ? `q-${currentSlot.slot_index}` : null}
           />
+          {allDone && cassianVisible ? (
+            <div className="mt-5 rounded-xl border-2 p-4" style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-card)' }}>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--brand-navy)' }}>
+                Admin only · Cassian question experiment
+              </p>
+              <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Optional pilot questions after today’s bonus. Your answers and ratings stay outside game progress and activity.
+              </p>
+              <CassianReviewClient />
+            </div>
+          ) : null}
           </>
         )}
       </section>

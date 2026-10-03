@@ -24,6 +24,7 @@ import {
   generatedQuestions,
   masteryEvents,
   playerMastery,
+  pool,
   questions as canonicalQuestions,
   skippedDailyQuestions,
   userDomainExclusions,
@@ -75,6 +76,7 @@ import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { masteryDomainFeedsRotation } from '@/lib/knowledge/rotation-eligibility';
 import type { BankMissReason } from '@/server/daily/build-context';
+import { isAdminUser } from '@/server/auth/admin';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -2059,10 +2061,16 @@ export async function getRecentDailyQuestionTexts(
     .orderBy(sql`${generatedQuestions.createdAt} desc`)
     .limit(limit);
 
-  return rows.map((row) => ({
+  const cassian = isAdminUser(userId)
+    ? (await pool.query<{ domain: string; text: string }>(`
+        SELECT c.domain, c.question_text AS text
+        FROM "CassianReview" r JOIN "CassianCandidate" c ON c.id = r.candidate_id
+        WHERE r.admin_user_id = $1 ORDER BY r.shown_at DESC LIMIT $2`, [userId, limit])).rows
+    : [];
+  return [...cassian, ...rows.map((row) => ({
     domain: row.domain ?? 'unknown',
     text: row.questionText,
-  }));
+  }))].slice(0, limit);
 }
 
 export type BankSource = {
@@ -2244,13 +2252,19 @@ function bankStockConditions(userId: string, domain: string) {
 // the recency-limited getRecentFactKeys (200) and a 445-fact history
 // already overflows it — this clause is the uncapped guarantee.
 function notAnsweredByViewer(userId: string) {
-  return sql`NOT EXISTS (
-    SELECT 1 FROM "MASTERY_EVENTS" me
-    JOIN "Question" cq ON me.question_id = cq.id
-    JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
-    WHERE me.answered_by_user_id = ${userId}
-      AND agq.fact_key = ${generatedQuestions.factKey}
-  )`;
+  const ordinaryHistory = sql`NOT EXISTS (
+      SELECT 1 FROM "MASTERY_EVENTS" me
+      JOIN "Question" cq ON me.question_id = cq.id
+      JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
+      WHERE me.answered_by_user_id = ${userId}
+        AND agq.fact_key = ${generatedQuestions.factKey}
+    )`;
+  if (!isAdminUser(userId)) return ordinaryHistory;
+  return and(ordinaryHistory, sql`NOT EXISTS (
+    SELECT 1 FROM "CassianReview" cr
+    JOIN "CassianCandidate" cc ON cc.id = cr.candidate_id
+    WHERE cr.admin_user_id = ${userId} AND cc.fact_key = ${generatedQuestions.factKey}
+  )`);
 }
 
 export async function pickBankSource(
@@ -2953,9 +2967,21 @@ export async function getRecentFactKeys(
       .limit(limit),
   ]);
 
+  // Only admins can see Cassian cards. Put their exposures first so the prompt
+  // and bank pick see them even when regular history exceeds the prompt cap.
+  const cassian = isAdminUser(userId)
+    ? (await pool.query<{ fact_key: string; domain: string }>(`
+        SELECT c.fact_key, c.domain FROM "CassianReview" r
+        JOIN "CassianCandidate" c ON c.id = r.candidate_id
+        WHERE r.admin_user_id = $1 ORDER BY r.shown_at DESC LIMIT $2`, [userId, limit])).rows
+    : [];
+
   const out: RecentFactKeyEntry[] = [];
   const seen = new Set<string>();
-  for (const row of [...waiting, ...answered, ...generated]) {
+  for (const row of [
+    ...cassian.map((entry) => ({ factKey: entry.fact_key, domain: entry.domain })),
+    ...waiting, ...answered, ...generated,
+  ]) {
     if (!row.factKey || seen.has(row.factKey)) continue;
     seen.add(row.factKey);
     out.push({ domain: row.domain ?? 'unknown', factKey: row.factKey });
@@ -2991,7 +3017,16 @@ export async function getAnsweredFactKeysAmong(
     .where(
       and(eq(masteryEvents.answeredByUserId, userId), inArray(generatedQuestions.factKey, keys)),
     );
-  return new Set(rows.map((row) => row.factKey).filter((key): key is string => Boolean(key)));
+  const exposed = isAdminUser(userId)
+    ? (await pool.query<{ fact_key: string }>(`
+        SELECT DISTINCT c.fact_key FROM "CassianReview" r
+        JOIN "CassianCandidate" c ON c.id = r.candidate_id
+        WHERE r.admin_user_id = $1 AND c.fact_key = ANY($2::text[])`, [userId, keys])).rows
+    : [];
+  return new Set([
+    ...rows.map((row) => row.factKey).filter((key): key is string => Boolean(key)),
+    ...exposed.map((row) => row.fact_key),
+  ]);
 }
 
 /**

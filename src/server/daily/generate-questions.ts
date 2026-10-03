@@ -973,7 +973,7 @@ async function findBatchDuplicates(questions: LlmQuestion[]): Promise<Set<number
   }
 }
 
-const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. Each item carries its difficulty tier (tier=accessible | moderate | specialist). For each question, decide whether it has any of these defects:
+export const QUALITY_GATE_SYSTEM_PROMPT = `You are reviewing a small batch of just-generated trivia questions for quality before they are served to a player. Each item carries its difficulty tier (tier=accessible | moderate | specialist). For each question, decide whether it has any of these defects:
 
 1. ANSWER_LEAKED — the question setup contains the answer, near-paraphrase, or a tell that gives the answer away. E.g. "Mrs. Lovett bakes meat pies using a secret ingredient from Sweeney's victims. What does she put in the pies?" — the setup tells you it's the victims.
 2. OPINION_OR_VAGUE — asks for a preference, value judgment, or has no single clear answer.
@@ -1192,7 +1192,7 @@ export function isDomainDriftDropEnabled(): boolean {
 // questions get the equivalent via vetQuestion() on the /api/questions path;
 // bot-generated daily questions had no equivalent until this gate. Like the
 // others it is batch-based, runs in parallel, and fails open.
-const FACTUAL_GATE_SYSTEM_PROMPT = `You are fact-checking a small batch of just-generated trivia questions before they are served to a player. Each item has a question and the stated answer the game will mark as correct. Your job is to catch questions whose stated answer is WRONG, OR whose question setup states something factually false.
+export const FACTUAL_GATE_SYSTEM_PROMPT = `You are fact-checking a small batch of just-generated trivia questions before they are served to a player. Each item has a question and the stated answer the game will mark as correct. Your job is to catch questions whose stated answer is WRONG, OR whose question setup states something factually false.
 
 For each question decide:
 - WRONG — any of:

@@ -134,7 +134,7 @@ Return ONE JSON object only, no prose outside it:
 { "found": true | false, "source": "wikipedia" | "fandom", "source_url": "<page url>", "passage": "<the passage>" }
 - found=false (omit the other fields) when neither source has real in-universe coverage.`;
 
-function retrievalSystemPrompt(pref: ReferenceSourcePreference): string {
+export function retrievalSystemPrompt(pref: ReferenceSourcePreference): string {
   return pref === 'fandom' ? RETRIEVAL_SYSTEM_PROMPT_FANDOM : RETRIEVAL_SYSTEM_PROMPT_WIKIPEDIA;
 }
 
