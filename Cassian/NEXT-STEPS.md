@@ -1,0 +1,18 @@
+# Cassian: what to do next
+
+The pilot is ready for code review, but owner ratings have not begun. The current implementation and exact state are in [TRACKER.md](TRACKER.md); [RESULTS.md](runs/cassian-pilot-2026-10-03/RESULTS.md) has the measured comparison. The public [manifest](manifest.json) uses placeholders; the real one is ignored under `_scratch/Cassian/cassian-pilot-2026-10-03/private/manifest.json`.
+
+1. Complete signed-in admin preview QA on draft PR #1745: finish Daily Five with and without bonus questions, check the clearly marked panel after play, answer and rate a card, reload and confirm the saved rating, check mobile layout and ordinary-user invisibility. The local anonymous 404, full build, TypeScript, focused tests and CI passed. An attempted signed-in Chrome check was stopped before app load by Chrome (`ERR_BLOCKED_BY_CLIENT`); use a browser where the protected preview opens normally, without bypassing its protection. Do not expose cards in production until these checks pass.
+
+   Use the immutable URL from the latest GitHub deployment status, not the old branch-style alias (which returned 404). For head `8b59398f`, the URL is `https://joshing-11-debxi3rzo-joshuapalay-5402s-projects.vercel.app/admin/cassian`. The owner can load it but preview phone login lacks a delivered SMS code. First determine whether the preview shows a send error or reaches the code-entry screen; never ask the owner to share an OTP.
+2. Review the 22 privately exported reported-question cases in `_scratch/Cassian/reported-questions-private.json` as development/regression examples. Four reports were upheld; nine were admin-edited (eight have a prior queue snapshot); nine remain open. A prior queue snapshot is not proof of the exact report-time version. Never use current corrected text as a bad example, or treat open reports as proven errors.
+3. Deploy the admin-only feature through the established process after preview QA and confirm the deployed SHA, non-admin 404, answer/reveal, rating save/reload, no mastery/activity writes, and a no-bonus Daily Five case.
+4. As an admin, play and rate the eligible experimental cards. Give Good/Fix/Reject/Unsure plus notes, flag inaccurate keys or same-fact repeats, and add missing-topic/variety/UI feedback in the panel. The model and gate verdict appear only after your first rating so they do not bias it.
+5. After the ratings, analyze accepted unique questions by broad/niche/very narrow group. Do not pick a winner from the 6-versus-4 machine-gate counts alone. Source retrieval was about 69% of the actual pilot spend, so the next bounded test should examine retrieval reuse and cold topic-to-first-ready latency while preserving topic coverage.
+6. If you find the original approximately 80-question document, provide its title or repository path to the implementation session. It is not required to rate this pilot and must not be misidentified as the 54 active reference examples.
+
+The $10 paid authorization remains a lifetime cap for this experiment. The database ledger currently records $1.900008 spent and no reservation. Any answer-grading or follow-up cost draws from the remaining balance. The $5/month operating target remains unproven because other recurring costs exceed it even if writing were free.
+
+Migration coordination is time-sensitive: 0151–0153 are already applied live but still only on this draft branch. [MIGRATION-ORDER.md](MIGRATION-ORDER.md) reserves 0154 with a later journal `when` for the next migration until #1745 merges.
+
+For another coding session, paste [HANDOFF-PROMPT.md](HANDOFF-PROMPT.md) and ask it to continue from the tracker. It should not restart the paid 12-topic run.

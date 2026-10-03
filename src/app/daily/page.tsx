@@ -19,6 +19,7 @@ import {
   submitAnswerWithRetry,
 } from '@/lib/answer-submit';
 import { GeometricProgress } from '@/components/play/GeometricProgress';
+import { CassianReviewClient } from '@/app/admin/cassian/review-client';
 import { AnswerInputBar } from '@/components/play/AnswerInputBar';
 import { NotForMeSheet } from '@/components/daily/NotForMeSheet';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -550,6 +551,19 @@ export default function DailyPage() {
       : DAILY_QUEUE_SIZE;
   const bonusDotCount = queue ? getBonusCount(queue.slots) : 0;
   const allDone = Boolean(queue && queue.slots.length > 0 && !actualCurrentSlot);
+  const completionKey = queue
+    ? `${queue.queue_id}:${queue.slots.map((slot) => `${slot.slot_index}/${slot.answered ? 'a' : slot.skipped ? 's' : 'p'}`).join(',')}`
+    : null;
+  const [serverConfirmedCompletionKey, setServerConfirmedCompletionKey] = useState<string | null>(null);
+  const [cassianVisible, setCassianVisible] = useState(false);
+  useEffect(() => {
+    if (!allDone || loading || error || serverConfirmedCompletionKey !== completionKey) return;
+    let cancelled = false;
+    fetch('/api/admin/cassian/next', { cache: 'no-store', credentials: 'same-origin' })
+      .then((response) => { if (!cancelled) setCassianVisible(response.ok); })
+      .catch(() => { if (!cancelled) setCassianVisible(false); });
+    return () => { cancelled = true; };
+  }, [allDone, loading, error, serverConfirmedCompletionKey, completionKey]);
 
   // Defense-in-depth against a partial queue snapshot (B-DAILY-PARTIAL-QUEUE-01).
   // If the round looks complete, re-fetch once to confirm the server agrees. A
@@ -580,6 +594,8 @@ export default function DailyPage() {
           // Re-arm so the next end-of-round (after the newly-revealed slots are
           // played) revalidates again; convergence is bounded by the server count.
           revalidatedEndRef.current = false;
+        } else if (body.queue_id === queue.queue_id && serverSlots.length > 0 && !hasPendingSlot(serverSlots)) {
+          setServerConfirmedCompletionKey(completionKey);
         }
       } catch {
         // Best-effort — a failed revalidation just leaves the session-close as-is.
@@ -588,7 +604,7 @@ export default function DailyPage() {
     return () => {
       cancelled = true;
     };
-  }, [allDone, loading, error, queue]);
+  }, [allDone, loading, error, queue, completionKey]);
 
   const requestRecheck = useCallback(
     async (slotIndex: number, argument: string | null): Promise<RecheckActionResult> => {
@@ -1248,6 +1264,17 @@ export default function DailyPage() {
             reportSurface="daily_five"
             activeQuestionId={currentSlot ? `q-${currentSlot.slot_index}` : null}
           />
+          {allDone && serverConfirmedCompletionKey === completionKey && cassianVisible ? (
+            <div className="mt-5 rounded-xl border-2 p-4" style={{ borderColor: 'var(--brand-navy)', background: 'var(--brand-card)' }}>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--brand-navy)' }}>
+                Admin only · Cassian question experiment
+              </p>
+              <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Optional pilot questions after today’s bonus. Your answers and ratings stay outside game progress and activity.
+              </p>
+              <CassianReviewClient />
+            </div>
+          ) : null}
           </>
         )}
       </section>

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "cassian-public-example",
+  "selectedFrom": "Public placeholder topics. The executed manifest is private and identified by SHA-256 in the run report.",
+  "requestedPerTopicPerArm": 1,
+  "arms": [
+    { "id": "baseline", "model": "claude-sonnet-5-5" },
+    { "id": "candidate", "model": "claude-haiku-4-5-20251001" }
+  ],
+  "topics": [
+    { "domain": "Broad topic A", "breadth": "broad", "difficulty": "normal" },
+    { "domain": "Broad topic B", "breadth": "broad", "difficulty": "moderate" },
+    { "domain": "Broad topic C", "breadth": "broad", "difficulty": "normal" },
+    { "domain": "Broad topic D", "breadth": "broad", "difficulty": "challenging" },
+    { "domain": "Niche topic A", "breadth": "niche", "difficulty": "moderate" },
+    { "domain": "Niche topic B", "breadth": "niche", "difficulty": "challenging" },
+    { "domain": "Niche topic C", "breadth": "niche", "difficulty": "moderate" },
+    { "domain": "Niche topic D", "breadth": "niche", "difficulty": "challenging" },
+    { "domain": "Very narrow topic A", "breadth": "very narrow", "difficulty": "challenging" },
+    { "domain": "Very narrow topic B", "breadth": "very narrow", "difficulty": "challenging" },
+    { "domain": "Very narrow topic C", "breadth": "very narrow", "difficulty": "moderate" },
+    { "domain": "Very narrow topic D", "breadth": "very narrow", "difficulty": "challenging" }
+  ]
+}

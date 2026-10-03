@@ -64,6 +64,11 @@ export async function middleware(request: NextRequest) {
   const claims = await readSessionClaims(token);
 
   if (!claims) {
+    // Cassian is an admin-only experiment. Do not advertise its route to
+    // anonymous visitors through the normal API 401 or login redirect.
+    if (pathname === '/admin/cassian' || pathname.startsWith('/api/admin/cassian/')) {
+      return tagTiming(new NextResponse(null, { status: 404 }), startedAt);
+    }
     if (isApi) {
       return tagTiming(
         NextResponse.json(

@@ -156,6 +156,12 @@ export default async function AdminOverviewPage() {
             },
           ]}
         />
+        <OverviewCard
+          href="/admin/cassian"
+          title="Cassian experiment"
+          description="Answer and rate the isolated question-writing comparison. Admin only; no game progress is affected."
+          stats={[{ value: '24', label: 'pilot candidates', tone: 'navy' }]}
+        />
       </div>
 
       <GroupHeading>Author</GroupHeading>
