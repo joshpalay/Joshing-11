@@ -23,6 +23,7 @@ Status: the 12-topic machine-screening run is complete under the durable spend l
 3. [Detailed next steps](NEXT-STEPS.md) — what the owner and next implementing session should do.
 4. [Ready-to-paste implementation prompt](HANDOFF-PROMPT.md).
 5. [Progress and budget tracker](TRACKER.md).
+6. [Reference-cache follow-up](RETRIEVAL-FOLLOWUP.md) — read-only evidence and the measurement needed before any TTL change.
 
 The committed [manifest](manifest.json) uses generic placeholders because this repository is public. The executed manifest is in ignored `_scratch/Cassian/cassian-pilot-2026-10-03/private/manifest.json`; set `CASSIAN_MANIFEST_FILE` to that path for run-specific estimates or recovery. The [offline estimator](../scripts/cassian-estimate.ts) supports `--topics 3|6|9|12`. The [checkpointed comparison runner](../scripts/cassian-compare.ts) requires both an explicit private manifest path and `--run` or `--resume` before any paid call. See the [runtime baseline](BASELINE.md) and tracker for the precise stage.
 

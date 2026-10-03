@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { pool } from '@/server/db';
 import { normalizeForMatch } from '@/server/answers/match-normalization';
+import { sameFactAnswerKey } from '@/server/daily/answer-cooldown';
 import { gradeCassianAnswer } from './grade';
 
 type CandidateRow = {
@@ -22,7 +23,7 @@ export type CassianCard = {
   };
 };
 
-function publicCard(row: CandidateRow): CassianCard {
+export function publicCard(row: CandidateRow): CassianCard {
   return {
     id: row.id, domain: row.domain, breadth: row.breadth,
     difficulty: row.difficulty, questionText: row.question_text,
@@ -85,7 +86,32 @@ export async function alreadySeen(client: PoolClient, userId: string, candidate:
     [userId, candidate.fact_key,
       candidate.question_text.toLowerCase().replace(/[^a-z0-9]/g, '')],
   );
-  return Boolean(result.rows[0]?.seen);
+  if (result.rows[0]?.seen) return true;
+  // Fact keys can differ for a paraphrase. The existing same-fact answer key
+  // catches a second wording of a distinctive answer within the same domain;
+  // low-information answers (years, colors, yes/no) are excluded by that helper.
+  const answerKey = sameFactAnswerKey(candidate.answer);
+  if (!answerKey) return false;
+  const answers = await client.query<{ answer: string }>(`
+    SELECT g.answer FROM "GeneratedQuestion" g
+    WHERE g.user_id = $1 AND lower(g.canonical_subcategory) = lower($2)
+    UNION ALL
+    SELECT q.answer_text FROM "MASTERY_EVENTS" m
+    JOIN "Question" q ON q.id = m.question_id
+    WHERE m.answered_by_user_id = $1 AND lower(q.canonical_subcategory) = lower($2)
+    UNION ALL
+    SELECT q.answer_text FROM "FeedItem" f
+    JOIN "Question" q ON q.id = f."questionId"
+    WHERE f."recipientUserId" = $1 AND lower(q.canonical_subcategory) = lower($2)
+    UNION ALL
+    SELECT q.answer_text FROM "Question" q
+    WHERE q.creator_id = $1 AND lower(q.canonical_subcategory) = lower($2)
+    UNION ALL
+    SELECT c.answer FROM "CassianReview" r
+    JOIN "CassianCandidate" c ON c.id = r.candidate_id
+    WHERE r.admin_user_id = $1 AND lower(c.domain) = lower($2)`,
+  [userId, candidate.domain]);
+  return answers.rows.some((row) => sameFactAnswerKey(row.answer) === answerKey);
 }
 
 /** Allocate one card per admin. Refresh returns the existing unreviewed card. */

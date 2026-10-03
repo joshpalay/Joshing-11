@@ -35,8 +35,8 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 | C1 Offline runner | Operational; failure tests incomplete | Dry-run, 3-topic run, 12-topic resume and DB budget settlement worked. Test recovery and overlapping runners before future paid work. |
 | C2 Admin ratings | Implemented locally; deployed QA pending | 24 candidates imported; admin endpoints and page include answer/reveal, blind first rating, post-rating gate audit, corrections and panel note. Verify actual admin/non-admin sessions and save/reload. |
 | C3 First comparison | Machine screen complete; owner review pending | [Results](runs/cassian-pilot-2026-10-03/RESULTS.md): 12 questions per arm, 6 Sonnet and 4 Haiku core-gate passes, zero human ratings. No winner yet. |
-| C4 Below-bonus panel | Implemented locally; deployed QA pending | Shared review component appears only after completed Daily Five and admin visibility probe. Check no-bonus, partial queue, mobile, recap and novelty in preview. |
-| C5 Follow-up | Pending | Collect owner ratings, then choose a bounded retrieval/cache and cold topic-to-ready test. Retrieval is the larger measured lever. |
+| C4 Below-bonus panel | Preview built; admin QA pending | Shared review component appears only after completed Daily Five and admin visibility probe. Local anonymous page and all API routes return 404; Vercel preview itself is access-protected. Check signed-in admin, no-bonus, partial queue, mobile, recap and novelty. |
+| C5 Follow-up | Read-only cache audit done; paid test pending | [Retrieval follow-up](RETRIEVAL-FOLLOWUP.md): 25 calls/30d, p50 ~11.7s, only 18/111 active topics cached at snapshot. Collect owner ratings and repeat-fetch evidence before TTL or paid test. |
 | C6 Final report | Pending | Human quality, cost per accepted unique question, topic coverage, latency, fixed-workload monthly feasibility and budget left. |
 
 ## Current caveats
@@ -46,7 +46,7 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 - The approximately 80-question owner-written document remains unfound. Fifty-four active examples are provisional style references; the original report snapshots remain private. No training has been attempted.
 - The implemented core screen does not replay every production history/embedding/ask-to-answer check. The panel performs exact/fact-key checks against production and prior Cassian exposures and feeds Cassian exposures into later normal generation/bank exclusions. Semantic same-fact paraphrases remain a QA risk; do not claim absolute novelty until tested.
 - Initial ratings hide model and gate identity; gate verdict is shown only after first save. Review revisions are stored in `CassianReview.rating_history`.
-- An automated review rejected recursively removing the superseded `docs/experiments/question-quality-v1` directory. It remains in this worktree with Cassian designated as the current plan.
+- An automated review rejected recursively deleting the superseded `docs/experiments/question-quality-v1` directory. The safer alternative removed it from the PR index while leaving the local files intact. Cassian is the sole plan in the sanitized PR.
 - The public branch previously contained narrow topic names and production spend figures. Working files are now genericized; prior public commit objects may remain accessible after history/ref cleanup. Do not commit the private manifest or raw responses.
 
 ## Session log
@@ -54,13 +54,14 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 - 2026-10-03: Created Cassian plan and clean current-main worktree. Opened draft PR #1745. Captured production baseline and froze 12-topic manifest.
 - 2026-10-03: Added 0151 budget ledger, checkpointed paired runner and executed 3-topic then 12-topic pilot at $1.900008. Ran TypeScript and focused budget tests.
 - 2026-10-03: Added 0152 candidate/review storage and imported 24 snapshots idempotently. Added 0153 panel notes. Implemented admin page/endpoints, below-bonus Daily Five placement and scoped cross-direction fact exclusion. Read-only schema smoke passed with zero reviews; deployed auth/UX QA pending.
-- 2026-10-03: Reviewer identified retrieval as the larger cost lever, gate-model coupling, fixed-size estimator and public data exposure. Pinned gate/source models independent of arms, enabled 3/6/9/12-topic estimates, moved the exact manifest to ignored storage, and generalized public documentation. Public branch history cleanup is pending.
+- 2026-10-03: Reviewer identified retrieval as the larger cost lever, gate-model coupling, fixed-size estimator and public data exposure. Pinned gate/source models independent of arms, enabled 3/6/9/12-topic estimates, moved the exact manifest to ignored storage, and generalized public documentation. Both remote Cassian branch references now point to one sanitized commit; PR #1745 has a generic description. Prior public commit objects may still be accessible by SHA.
+- 2026-10-03: Production build and affected-code lint passed. Local anonymous GET/POST checks found the existing middleware returned redirects/401 before Cassian guards, so Cassian paths now return 404 at that boundary; a rebuilt local server confirmed all six anonymous paths return 404. The protected Vercel preview is green, but signed-in admin UX remains untested there. A read-only retrieval audit found 25 calls in 30 days (p50 11,731 ms) and 18 cached rows among 111 active topics; repeat-fetch frequency cannot be recovered from existing tables.
 
 ## Next exact actions
 
-1. Finish focused novelty, auth, answer/revision, and budget-failure tests; run build/lint. Fix any failures.
-2. Update the draft PR with the implementation and measured results; push sanitized work and verify no sensitive topics remain in the branch diff/history. Reconcile the previous public planning branch.
-3. Deploy admin-only through the established process; verify non-admin 404 and actual admin save/reload. No card has yet been shown to a player.
+1. Commit/push the final novelty and middleware follow-up plus read-only retrieval audit, then recheck CI and preview SHA. Do not re-add the untracked superseded docs.
+2. Finish signed-in admin save/reload, no-bonus/partial-queue and semantic novelty QA in a preview session. No card had been shown to a player at the last database check.
+3. Deploy admin-only through the established process when those checks pass; verify non-admin 404 and no ordinary-game writes.
 4. Have the owner rate eligible cards. Analyze quality by topic breadth and gate false rejection before choosing a writer or paying for a retrieval follow-up.
 
 At each handoff record branch/commit, deployment SHA, candidate/exposure/review counts, budget spent/reserved, exact model/gate IDs, tests, human feedback and remaining risks. Implementation is not the final experiment result.
