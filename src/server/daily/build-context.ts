@@ -61,11 +61,20 @@ export type BuildRoundSpan = {
  */
 export type BuildPhase = 'core' | 'bonus';
 
+/**
+ * Why the bank couldn't serve a domain, from a count of what stock was actually
+ * there (classifyBankMiss). Rows written before 2026-10-03 used a ladder-shape
+ * guess instead — 'tier' meant only "a fallback ladder existed", and
+ * 'fact_history' was never emitted — so don't compare across that date.
+ * 'unknown' = the diagnosis query itself failed.
+ */
+export type BankMissReason = 'tier' | 'fact_history' | 'no_stock' | 'filtered' | 'unknown';
+
 export type BankAttempt = {
   domain: string;
   outcome: 'hit' | 'miss';
   /** Why a nominally covered domain failed to serve. Null on a hit. */
-  missReason: 'tier' | 'fact_history' | 'no_stock' | null;
+  missReason: BankMissReason | null;
   tierRequested: string;
   tierServed: string | null;
 };

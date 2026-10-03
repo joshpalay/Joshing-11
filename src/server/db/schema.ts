@@ -2317,7 +2317,7 @@ export const dailyBuildMetrics = pgTable(
         Array<{
           domain: string;
           outcome: 'hit' | 'miss';
-          missReason: 'tier' | 'fact_history' | 'no_stock' | null;
+          missReason: 'tier' | 'fact_history' | 'no_stock' | 'filtered' | 'unknown' | null;
           tierRequested: string;
           tierServed: string | null;
         }>

@@ -74,6 +74,7 @@ import { getBasePoints } from '@/server/mastery/scoring';
 import { isGenericSubcategory } from '@/server/questions/canonical-subcategory';
 import { domainKey } from '@/lib/knowledge/domain-key';
 import { masteryDomainFeedsRotation } from '@/lib/knowledge/rotation-eligibility';
+import type { BankMissReason } from '@/server/daily/build-context';
 
 function asQueueSlotDifficulty(
   value: string | null | undefined,
@@ -2206,13 +2207,10 @@ function isBankIncludeOwnUnusedEnabled(): boolean {
   return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off');
 }
 
-export async function pickBankSource(
-  userId: string,
-  domain: string,
-  difficulty: BankDifficulty,
-  avoidFactKeys: ReadonlySet<string>,
-  avoidQuestionTexts: ReadonlySet<string> = new Set(),
-): Promise<BankSource | null> {
+// The tier-independent part of "what bank stock could this viewer be served for
+// this domain" — shared by pickBankSource and classifyBankMiss so the miss
+// diagnosis can never drift from what the picker actually considers.
+function bankStockConditions(userId: string, domain: string) {
   // Cross-user stock, plus (when enabled) the viewer's own never-served rows.
   const viewerClause = isBankIncludeOwnUnusedEnabled()
     ? or(
@@ -2220,7 +2218,48 @@ export async function pickBankSource(
         and(eq(generatedQuestions.userId, userId), eq(generatedQuestions.usedInQueue, false)),
       )
     : sql`${generatedQuestions.userId} <> ${userId}`;
+  return and(
+    // BP-7 / C5: match on the folded domain_key (written by domainKey() at
+    // every pool insert) so spelling variants of one domain share stock —
+    // with the legacy exact-string predicate as the fallback for rows that
+    // pre-date the 0074 backfill. No age predicate: the pool is durable
+    // (D8) — recency only biases the window below, it never excludes.
+    or(
+      eq(generatedQuestions.domainKey, domainKey(domain)),
+      eq(generatedQuestions.canonicalSubcategory, domain),
+    ),
+    isNotNull(generatedQuestions.factKey),
+    viewerClause,
+    eq(generatedQuestions.isDuplicate, false),
+    // B-Report-3: skip generated questions under an open/upheld report.
+    notSuppressedByContentReport(generatedQuestions.id, 'generated'),
+  );
+}
 
+// Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exclude ANY row whose fact
+// the viewer has already answered, on any surface, however long ago —
+// the MASTERY_EVENTS → canonical-twin → fact_key bridge, enforced in
+// SQL so it cannot be capped. The in-memory avoidFactKeys set in
+// pickBankSource still covers same-build/batch avoidance, but it is built from
+// the recency-limited getRecentFactKeys (200) and a 445-fact history
+// already overflows it — this clause is the uncapped guarantee.
+function notAnsweredByViewer(userId: string) {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM "MASTERY_EVENTS" me
+    JOIN "Question" cq ON me.question_id = cq.id
+    JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
+    WHERE me.answered_by_user_id = ${userId}
+      AND agq.fact_key = ${generatedQuestions.factKey}
+  )`;
+}
+
+export async function pickBankSource(
+  userId: string,
+  domain: string,
+  difficulty: BankDifficulty,
+  avoidFactKeys: ReadonlySet<string>,
+  avoidQuestionTexts: ReadonlySet<string> = new Set(),
+): Promise<BankSource | null> {
   let candidates: Array<typeof generatedQuestions.$inferSelect>;
   try {
     candidates = await db
@@ -2228,35 +2267,9 @@ export async function pickBankSource(
       .from(generatedQuestions)
       .where(
         and(
-          // BP-7 / C5: match on the folded domain_key (written by domainKey() at
-          // every pool insert) so spelling variants of one domain share stock —
-          // with the legacy exact-string predicate as the fallback for rows that
-          // pre-date the 0074 backfill. No age predicate: the pool is durable
-          // (D8) — recency only biases the window below, it never excludes.
-          or(
-            eq(generatedQuestions.domainKey, domainKey(domain)),
-            eq(generatedQuestions.canonicalSubcategory, domain),
-          ),
+          bankStockConditions(userId, domain),
           eq(generatedQuestions.difficultyEstimate, difficulty),
-          isNotNull(generatedQuestions.factKey),
-          viewerClause,
-          eq(generatedQuestions.isDuplicate, false),
-          // B-Report-3: skip generated questions under an open/upheld report.
-          notSuppressedByContentReport(generatedQuestions.id, 'generated'),
-          // Full-set dedup (D-SUPPLY-NEVER-REPEAT-01): exclude ANY row whose fact
-          // the viewer has already answered, on any surface, however long ago —
-          // the MASTERY_EVENTS → canonical-twin → fact_key bridge, enforced in
-          // SQL so it cannot be capped. The in-memory avoidFactKeys set below
-          // still covers same-build/batch avoidance, but it is built from the
-          // recency-limited getRecentFactKeys (200) and a 445-fact history
-          // already overflows it — this clause is the uncapped guarantee.
-          sql`NOT EXISTS (
-          SELECT 1 FROM "MASTERY_EVENTS" me
-          JOIN "Question" cq ON me.question_id = cq.id
-          JOIN "GeneratedQuestion" agq ON cq.generated_question_id = agq.id
-          WHERE me.answered_by_user_id = ${userId}
-            AND agq.fact_key = ${generatedQuestions.factKey}
-        )`,
+          notAnsweredByViewer(userId),
         ),
       )
       .orderBy(desc(generatedQuestions.createdAt))
@@ -2320,6 +2333,64 @@ export async function pickBankSource(
     };
   }
   return null;
+}
+
+export type BankTierStockCount = { tier: string; total: number; unanswered: number };
+
+/**
+ * Pure rule behind classifyBankMiss: given the viewer-eligible stock for a
+ * domain, counted per tier, say WHY the tier ladder came back empty.
+ *
+ *   no_stock     — nothing on this domain the viewer could ever be served.
+ *   fact_history — stock exists, but the viewer has answered every fact in it.
+ *   tier         — unanswered stock exists, but only at tiers outside the ladder.
+ *   filtered     — unanswered stock exists ON the ladder, yet the picker still
+ *                  passed: the in-memory recent/same-build avoid list, the
+ *                  viewer's authored texts, dud stock, or the bank quality gate.
+ */
+export function bankMissReasonFromCounts(
+  counts: readonly BankTierStockCount[],
+  ladder: readonly BankDifficulty[],
+): Exclude<BankMissReason, 'unknown'> {
+  const total = counts.reduce((sum, row) => sum + row.total, 0);
+  if (total === 0) return 'no_stock';
+  const unanswered = counts.reduce((sum, row) => sum + row.unanswered, 0);
+  if (unanswered === 0) return 'fact_history';
+  const onLadder = counts
+    .filter((row) => (ladder as readonly string[]).includes(row.tier))
+    .reduce((sum, row) => sum + row.unanswered, 0);
+  return onLadder > 0 ? 'filtered' : 'tier';
+}
+
+/**
+ * Diagnose a bank miss (A0 telemetry). One grouped count over the same stock
+ * conditions pickBankSource uses, so the recorded reason reflects what was
+ * actually there instead of guessing from the ladder's shape. Only called on a
+ * miss inside a build — a miss falls through to multi-second generation, so
+ * one extra indexed count is noise.
+ */
+export async function classifyBankMiss(
+  userId: string,
+  domain: string,
+  ladder: readonly BankDifficulty[],
+): Promise<Exclude<BankMissReason, 'unknown'>> {
+  const rows = await db
+    .select({
+      tier: generatedQuestions.difficultyEstimate,
+      total: sql<number>`count(*)::int`,
+      unanswered: sql<number>`(count(*) FILTER (WHERE ${notAnsweredByViewer(userId)}))::int`,
+    })
+    .from(generatedQuestions)
+    .where(bankStockConditions(userId, domain))
+    .groupBy(generatedQuestions.difficultyEstimate);
+  return bankMissReasonFromCounts(
+    rows.map((row) => ({
+      tier: String(row.tier),
+      total: Number(row.total) || 0,
+      unanswered: Number(row.unanswered) || 0,
+    })),
+    ladder,
+  );
 }
 
 // Counts of recent generations per canonical_subcategory for a user, scoped
