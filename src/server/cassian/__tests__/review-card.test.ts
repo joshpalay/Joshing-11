@@ -42,9 +42,11 @@ describe('Cassian exposure checks', () => {
     expect(seen).toBe(true);
     const firstSql = String(query.mock.calls[0][0]);
     expect(firstSql).toContain('"GeneratedQuestion"');
+    expect(firstSql).toContain('"DailyQueue"');
     expect(firstSql).toContain('"MASTERY_EVENTS"');
     expect(firstSql).toContain('"FeedItem"');
     expect(firstSql).toContain('"CassianReview"');
     expect(firstSql).not.toMatch(/\bLIMIT\b/);
+    expect(String(query.mock.calls[1][0])).toContain('"DailyQueue"');
   });
 });

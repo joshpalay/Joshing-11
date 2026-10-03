@@ -64,6 +64,12 @@ export async function alreadySeen(client: PoolClient, userId: string, candidate:
       WHERE g.user_id = $1 AND (g.fact_key = $2 OR
         regexp_replace(lower(g.question_text), '[^a-z0-9]', '', 'g') = $3)
       UNION ALL
+      SELECT 1 FROM "DailyQueue" d
+      CROSS JOIN LATERAL jsonb_array_elements(d.slots) AS s(slot)
+      LEFT JOIN "GeneratedQuestion" g ON g.id = s.slot ->> 'generated_question_id'
+      WHERE d.user_id = $1 AND (g.fact_key = $2 OR
+        regexp_replace(lower(s.slot ->> 'question_text'), '[^a-z0-9]', '', 'g') = $3)
+      UNION ALL
       SELECT 1 FROM "MASTERY_EVENTS" m
       JOIN "Question" q ON q.id = m.question_id
       LEFT JOIN "GeneratedQuestion" g ON g.id = q.generated_question_id
@@ -95,6 +101,12 @@ export async function alreadySeen(client: PoolClient, userId: string, candidate:
   const answers = await client.query<{ answer: string }>(`
     SELECT g.answer FROM "GeneratedQuestion" g
     WHERE g.user_id = $1 AND lower(g.canonical_subcategory) = lower($2)
+    UNION ALL
+    SELECT COALESCE(g.answer, q.answer_text) AS answer FROM "DailyQueue" d
+    CROSS JOIN LATERAL jsonb_array_elements(d.slots) AS s(slot)
+    LEFT JOIN "GeneratedQuestion" g ON g.id = s.slot ->> 'generated_question_id'
+    LEFT JOIN "Question" q ON q.id = s.slot ->> 'question_id'
+    WHERE d.user_id = $1 AND lower(s.slot ->> 'domain') = lower($2)
     UNION ALL
     SELECT q.answer_text FROM "MASTERY_EVENTS" m
     JOIN "Question" q ON q.id = m.question_id
