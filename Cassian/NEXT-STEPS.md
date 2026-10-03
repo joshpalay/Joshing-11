@@ -11,4 +11,6 @@ The pilot is ready for code review, but owner ratings have not begun. The curren
 
 The $10 paid authorization remains a lifetime cap for this experiment. The database ledger currently records $1.900008 spent and no reservation. Any answer-grading or follow-up cost draws from the remaining balance. The $5/month operating target remains unproven because other recurring costs exceed it even if writing were free.
 
+Migration coordination is time-sensitive: 0151–0153 are already applied live but still only on this draft branch. [MIGRATION-ORDER.md](MIGRATION-ORDER.md) reserves 0154 with a later journal `when` for the next migration until #1745 merges.
+
 For another coding session, paste [HANDOFF-PROMPT.md](HANDOFF-PROMPT.md) and ask it to continue from the tracker. It should not restart the paid 12-topic run.
