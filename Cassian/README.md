@@ -2,7 +2,7 @@
 
 Cassian is the current home for the experiment previously called QEXP-01. This folder supersedes the implementation scope in `docs/experiments/question-quality-v1/`; those documents remain background and provenance, not an instruction to build the earlier platform.
 
-Status: the 12-topic machine-screening run, admin-only play, owner ratings, independent source audit, and bounded no-explanation gate replay are complete. Six gate-passed, source-verified, nonduplicate questions were added to the shared bank at the owner's request; the remaining pilot candidates stay in Cassian. The pilot does not justify a production writer switch. The next measurement is read-only bank supply/reuse before selecting another paid arm. See [the owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md) and [tracker](TRACKER.md).
+Status: the 12-topic machine-screening run, admin-only play, owner ratings, independent source audit, and bounded no-explanation gate replay are complete. Six gate-passed, source-verified, nonduplicate questions were added to the shared bank at the owner's request; the remaining pilot candidates stay in Cassian. The pilot does not justify a production writer switch. The first [bank supply/reuse audit](BANK-SUPPLY.md) is complete, with more post-deployment builds needed before evaluating the new difficulty rule. See [the owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md) and [tracker](TRACKER.md).
 
 ## Confirmed owner decisions
 

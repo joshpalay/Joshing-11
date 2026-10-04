@@ -50,7 +50,9 @@ export function CassianReviewClient() {
   const [revisionId, setRevisionId] = useState(() => crypto.randomUUID());
   const [gateRevisionId, setGateRevisionId] = useState(() => crypto.randomUUID());
   const [details, setDetails] = useState<Details | null>(null);
-  const [gateReview, setGateReview] = useState('');
+  const [candidateDisposition, setCandidateDisposition] = useState('');
+  const [gateDecisionReview, setGateDecisionReview] = useState('');
+  const [postGateNote, setPostGateNote] = useState('');
   const [panelArea, setPanelArea] = useState('Missing topic');
   const [panelText, setPanelText] = useState('');
   const [panelNoteId, setPanelNoteId] = useState(() => crypto.randomUUID());
@@ -66,7 +68,7 @@ export function CassianReviewClient() {
       setAccuracyIssue(''); setFamiliarity('');
       setRevisionId(crypto.randomUUID());
       setGateRevisionId(crypto.randomUUID());
-      setDetails(null); setGateReview('');
+      setDetails(null); setCandidateDisposition(''); setGateDecisionReview(''); setPostGateNote('');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load a question.'); }
     finally { setBusy(false); }
   }
@@ -110,13 +112,16 @@ export function CassianReviewClient() {
   }
 
   async function submitGateReview() {
-    if (!card || !details || !gateReview) return;
+    if (!card || !details || (!candidateDisposition && !gateDecisionReview && !postGateNote.trim())) return;
     setBusy(true); setError('');
     try {
       await post('/api/admin/cassian/rating', {
         candidateId: card.id,
         rating: {
-          revisionId: gateRevisionId, overall, ...fields, gateReview, note,
+          revisionId: gateRevisionId, overall, ...fields, note,
+          ...(candidateDisposition ? { candidateDisposition } : {}),
+          ...(gateDecisionReview ? { gateDecisionReview } : {}),
+          ...(postGateNote.trim() ? { postGateNote: postGateNote.trim() } : {}),
           ...(accuracyIssue ? { accuracyIssue } : {}),
           ...(familiarity ? { familiarity } : {}),
           correctedQuestion: correction.question,
@@ -232,17 +237,35 @@ export function CassianReviewClient() {
           {details.gateReasons.length > 0 && <ul className="mt-1 list-disc pl-5 text-sm">
             {details.gateReasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>}
-          <label className="mt-4 block text-sm font-medium">Was the machine gate right?
-            <select value={gateReview} onChange={(event) => setGateReview(event.target.value)}
+          <p className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+            These are separate judgments. If you cannot verify a fact, choose Unsure.
+          </p>
+          <label className="mt-4 block text-sm font-medium">What should happen to this question?
+            <select value={candidateDisposition} onChange={(event) => setCandidateDisposition(event.target.value)}
               className="mt-1 w-full rounded-md border px-2 py-2" style={{ borderColor: 'var(--border)' }}>
-              <option value="">Choose a gate rating</option>
-              {['Pass', 'Revise', 'Reject', 'Unsure'].map((value) => <option key={value}>{value}</option>)}
+              <option value="">Choose a disposition</option>
+              <option value="Keep">Keep as written</option>
+              <option value="Revise">Revise question, answer, or explanation</option>
+              <option value="Reject">Reject this question</option>
+              <option value="Unsure">Unsure</option>
             </select>
           </label>
+          <label className="mt-4 block text-sm font-medium">Was the machine&apos;s pass or hold decision correct?
+            <select value={gateDecisionReview} onChange={(event) => setGateDecisionReview(event.target.value)}
+              className="mt-1 w-full rounded-md border px-2 py-2" style={{ borderColor: 'var(--border)' }}>
+              <option value="">No judgment</option>
+              <option value="Yes">Yes</option><option value="No">No</option><option value="Unsure">Unsure</option>
+            </select>
+          </label>
+          <label className="mt-4 block text-sm font-medium">Correction or reason for this question (optional)
+            <textarea value={postGateNote} onChange={(event) => setPostGateNote(event.target.value)}
+              maxLength={4000} rows={3} className="mt-1 w-full rounded-md border px-3 py-2" style={{ borderColor: 'var(--border)' }} />
+          </label>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>This note stays with this question. Use Experiment feedback below for missing topics, variety, or interface feedback.</p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <button type="button" disabled={busy || !gateReview} onClick={submitGateReview}
+            <button type="button" disabled={busy || (!candidateDisposition && !gateDecisionReview && !postGateNote.trim())} onClick={submitGateReview}
               className="rounded-md px-4 py-2 text-[var(--brand-card)] disabled:opacity-50" style={{ background: 'var(--brand-navy)' }}>
-              Save gate rating and continue
+              Save review and continue
             </button>
             <button type="button" disabled={busy} onClick={next} className="rounded-md border px-4 py-2" style={{ borderColor: 'var(--border)' }}>
               Continue without gate rating
