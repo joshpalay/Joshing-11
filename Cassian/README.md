@@ -2,7 +2,7 @@
 
 Cassian is the current home for the experiment previously called QEXP-01. This folder supersedes the implementation scope in `docs/experiments/question-quality-v1/`; those documents remain background and provenance, not an instruction to build the earlier platform.
 
-Status: the 12-topic machine-screening run is complete under the durable spend ledger. Admin review and the below-bonus panel are implemented on the draft branch; deployment and human ratings are pending verification. See [the run results](runs/cassian-pilot-2026-10-03/RESULTS.md) and [tracker](TRACKER.md).
+Status: the 12-topic machine-screening run, admin-only play, owner ratings, independent source audit, and bounded no-explanation gate replay are complete. Six gate-passed, source-verified, nonduplicate questions were added to the shared bank at the owner's request; the remaining pilot candidates stay in Cassian. The pilot does not justify a production writer switch. The next measurement is read-only bank supply/reuse before selecting another paid arm. See [the owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md) and [tracker](TRACKER.md).
 
 ## Confirmed owner decisions
 
@@ -28,6 +28,6 @@ Status: the 12-topic machine-screening run is complete under the durable spend l
 
 The committed [manifest](manifest.json) uses generic placeholders because this repository is public. The executed manifest is in ignored `_scratch/Cassian/cassian-pilot-2026-10-03/private/manifest.json`; set `CASSIAN_MANIFEST_FILE` to that path for run-specific estimates or recovery. The [offline estimator](../scripts/cassian-estimate.ts) supports `--topics 3|6|9|12`. The [checkpointed comparison runner](../scripts/cassian-compare.ts) requires both an explicit private manifest path and `--run` or `--resume` before any paid call. See the [runtime baseline](BASELINE.md) and tracker for the precise stage.
 
-The first engineering deliverables are the offline comparison runner and the admin rating interface. The below-bonus panel uses the same review component. Fine-tuning and general job infrastructure remain deferred.
+The offline comparison runner, admin rating interface, and below-bonus panel are implemented. Fine-tuning and general job infrastructure remain deferred. The Cassian panel remains admin-only; the six separately vetted bank additions can be served in ordinary play. No subscription work is planned.
 
 Do not store raw private reports, credentials or provider responses in this folder. Store local run data in ignored `_scratch/Cassian/`; store deployed ratings in an admin-protected durable database. Commit sanitized manifests, aggregates, tests and decisions only.

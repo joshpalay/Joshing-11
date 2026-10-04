@@ -1,6 +1,6 @@
 # Cassian tracker
 
-Updated 2026-10-04. Current follow-up branch `codex/cassian-explanation-yield`; the original Cassian implementation merged as [#1745](https://github.com/joshpalay/Joshing-11/pull/1745), and the malformed-key fix merged as [#1746](https://github.com/joshpalay/Joshing-11/pull/1746). Code worktree: `_scratch/cassian-worktree` under the repository root. The original checkout has unrelated edits and was not reset.
+Updated 2026-10-04. Current follow-up branch `codex/cassian-owner-review`; the original Cassian implementation merged as [#1745](https://github.com/joshpalay/Joshing-11/pull/1745), the malformed-key fix as [#1746](https://github.com/joshpalay/Joshing-11/pull/1746), the explanation replay as [#1747](https://github.com/joshpalay/Joshing-11/pull/1747), and the future-pricing note as [#1748](https://github.com/joshpalay/Joshing-11/pull/1748). Code worktree: `_scratch/cassian-worktree` under the repository root. The original checkout has unrelated edits and was not reset.
 
 ## Owner decisions
 
@@ -9,7 +9,7 @@ Updated 2026-10-04. Current follow-up branch `codex/cassian-explanation-yield`; 
 - Authorized incremental experiment cap: $10 total across runs, retrieval, gates, grading and failures. First run aimed below $4.
 - Admin-only Cassian card after all regular and bonus Daily Five questions; visually designated as an experiment.
 - Answer normally, then rate Good/Fix/Reject/Unsure and all optional dimensions, corrections and panel feedback.
-- No mastery, points, streak, normal bank, feed, notification or activity writes. No repeat of previously shown questions/facts.
+- Cassian play/review itself makes no mastery, points, streak, normal-bank, feed, notification or activity writes. Later owner-authorized, audited promotion to shared bank is tracked separately. No repeat of previously shown questions/facts.
 - Topic coverage and topic-selection-to-first-ready latency matter. Do not alter global model switches or the merged bank difficulty change (#1744).
 
 ## Durable budget and data
@@ -25,11 +25,11 @@ Updated 2026-10-04. Current follow-up branch `codex/cassian-explanation-yield`; 
 | Quality + factual gates within pilot | $0.324607 |
 | Explanation-free factual-gate replay | $0.151923 |
 | Answer grading in connected ledger | $0.005977 |
-| Current connected ledger spent | $2.057908 |
+| Current connected ledger spent | $2.059577 |
 | Current connected ledger reserved/uncertain | $0 |
-| Remaining authorized lifetime | $7.942092 |
+| Remaining authorized lifetime | $7.940423 |
 
-The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 24 immutable snapshots; at the last read-only smoke check `CassianReview` held zero exposures/reviews. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. No question was added to shared stock or shown to a player during the offline run.
+The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 24 immutable snapshots; the owner answered all 23 available cards and saved 22 overall ratings. The malformed Placeholder card was answered before its allocation fix and remains unrated; one pilot candidate was never shown. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. No candidate was added to shared stock; owner review occurred only in the admin experiment.
 
 The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/private/manifest.json`, SHA-256 `1d8312dcf9728de46a2a7af6206076ee9afc415bc4bd2234836ef5b1dcf91536`. The committed `Cassian/manifest.json` is a generic public estimator example. Set `CASSIAN_MANIFEST_FILE` to the private path for run-specific estimates, import or recovery. Raw responses/checkpoint remain ignored under `_scratch/Cassian/cassian-pilot-2026-10-03/`.
 
@@ -39,10 +39,10 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 | --- | --- | --- |
 | C0 Baseline | Partial | Recent model/gate IDs, tokens and internal spend reproduced. Provider invoice and deployed SHA not reconciled. Exact production amounts are kept privately because the repository is public. |
 | C1 Offline runner | Operational; failure tests incomplete | Dry-run, 3-topic run, 12-topic resume and DB budget settlement worked. Test recovery and overlapping runners before future paid work. |
-| C2 Admin ratings | Implemented locally; deployed QA blocked | 24 candidates imported; admin endpoints and page include answer/reveal, blind first rating, post-rating gate audit, corrections and panel note. Signed-in Chrome blocked the protected preview before app load (`ERR_BLOCKED_BY_CLIENT`); verify actual admin session and save/reload from a browser that can normally open the preview. |
-| C3 First comparison | Machine screen complete; owner review pending | [Results](runs/cassian-pilot-2026-10-03/RESULTS.md): 12 questions per arm, 6 Sonnet and 4 Haiku core-gate passes, zero human ratings. No winner yet. |
-| C4 Below-bonus panel | Preview built; admin QA blocked | Shared review component waits for server-confirmed completed Daily Five and admin visibility probe. Local anonymous page and all API routes return 404; Vercel preview itself is access-protected and signed-in Chrome blocked the page before app load. Check signed-in admin, no-bonus, partial queue, mobile, recap and novelty. |
-| C5 Follow-up | Read-only cache audit done; paid test pending | [Retrieval follow-up](RETRIEVAL-FOLLOWUP.md): 25 calls/30d, p50 ~11.7s, only 18/111 active topics cached at snapshot. Collect owner ratings and repeat-fetch evidence before TTL or paid test. |
+| C2 Admin ratings | Owner review completed | 23 available cards answered, 22 overall ratings saved. The sole unrated card was the malformed Placeholder item; no further rating is needed. The post-rating gate control caused confusion about disposition versus gate correctness. |
+| C3 First comparison | Owner and source review complete | [Owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md): 20/22 rated Good for appeal, but source-audited keeps are 8/12 Sonnet and 5/12 Haiku. Small sample; no production writer switch. |
+| C4 Below-bonus panel | Admin played in production | The owner answered the available cards in the admin experiment. The earlier protected-preview and production-login issues are historical. No ordinary-player rollout is planned. |
+| C5 Follow-up | Gate replay complete; bank analysis next | [Explanation yield](EXPLANATION-YIELD.md): one genuine explanation-only recovery. [Retrieval follow-up](RETRIEVAL-FOLLOWUP.md) remains a candidate, but first measure bank supply/reuse after the difficulty-rule deploy. No new paid arm selected. |
 | C5a Explanation yield | Gate-only replay complete; creation trial pending | [Explanation yield](EXPLANATION-YIELD.md): 24 saved questions replayed without explanations at the factual gate. Three more machine passes, but source audit confirms only one genuine explanation-only recovery; one false original hold and one unsafe new pass. No replacement generation measured yet. |
 | C6 Final report | Pending | Human quality, cost per accepted unique question, topic coverage, latency, fixed-workload monthly feasibility and budget left. |
 
@@ -71,11 +71,13 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 - 2026-10-03: The branch-style preview alias previously shared with the owner returned 404. GitHub's deployment status for head `8b59398f` instead reports the immutable deployment URL `https://joshing-11-debxi3rzo-joshuapalay-5402s-projects.vercel.app`. The owner can see the preview but cannot complete phone login without a production-delivered SMS code. The production and preview session cookies are host-scoped; whether the preview OTP request fails or merely lacks delivery is awaiting owner clarification. Do not request or record an OTP value.
 - 2026-10-04: Added an explanation-free factual-gate replay over the 24 immutable pilot snapshots. The first API request returned provider 400 before inference because Sonnet 5.5 deprecated `temperature`; the exact $0.03 reservation was reconciled at $0, and the corrected runner used the existing model-parameter sanitizer and a new ledger key. All 24 calls completed for $0.151923 with no unresolved reservation. Source-audited the three newly machine-eligible items: one genuine explanation-only recovery, one false original hold, one unsafe new pass. Added [EXPLANATION-YIELD.md](EXPLANATION-YIELD.md) with fixed-target replacement-cost and latency measures for the next creation trial. No normal-game change or candidate exposure occurred from this replay.
 - 2026-10-04: Recorded the owner's future 200-free-questions/monthly-subscription hypothesis in [FUTURE-PRICING.md](FUTURE-PRICING.md). Existing answer, build, and usage records support an initial read-only cohort-cost report; shared-bank amortization and calls outside a build need attribution review. No Cassian schema, paywall, allowance counter, or payment integration was added.
+- 2026-10-04: Owner answered all 23 available admin cards and saved 22 overall ratings (20 Good, 1 Reject, 1 Unsure). The remaining unrated card is the earlier malformed Placeholder item; one candidate was never shown. Independent source audit of all 24 found 8/1/3 keep/revise/reject for Sonnet and 5/3/4 for Haiku. With shared source cost split equally, the pilot cost per audited keep was $0.1270 vs $0.1769. [Owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md) records the decision not to switch writers and to analyze bank supply/reuse before another paid arm. The ledger stood at $2.059577 spent, $0 reserved. One optional panel note was a question correction saved under the generic "Missing topic" category; it is not a topic-coverage report.
+- 2026-10-04: At the owner's request, promoted six candidates that passed both core gates, passed independent source audit as written, and represented new facts in the shared bank. Two of the eight audited gate passes were skipped as existing/semantic duplicate facts; two further gate passes were withheld for correction. The six public `GeneratedQuestion` rows are durable, unused stock with source references and answer variants. The owner's prior Cassian exposures continue to exclude those facts from that owner's ordinary Daily Five. Transactional import and read-only verification succeeded; no paid calls or gameplay writes. Exact mappings and the idempotent import script remain ignored and private.
 
 ## Next exact actions
 
-1. Reconcile the owner's current admin ratings and the source audit without publishing private candidate text. Preserve the immutable pilot snapshots.
-2. Choose the next bounded creation trial between explanation-yield and retrieval reuse. If explanation yield runs next, freeze model/topics/evidence, use a fixed target of independently usable novel questions, and budget replacement rounds before dispatch.
-3. Keep the ordinary game unchanged until the prospective trial measures cost and latency per usable question. Do not convert the replay's three machine recoveries into three good questions or a monthly savings claim.
+1. Run a read-only bank-supply and cross-player reuse analysis: eligible unused stock by topic/tier, answered-out facts, post-difficulty-change build fills, and new generation calls per actual built queue. Do not count carry-forward rows as built games or expose private topic names.
+2. Decide whether remaining Cassian budget is best used for answer-only creation or reference retrieval reuse after the bank evidence. Preserve the fixed-target usable-question design for any paid arm.
+3. Before another admin review batch, clarify the gate-review control and provide a candidate-specific correction note. Keep the ordinary game and no-repeat rules unchanged; no writer rollout is justified by the small pilot.
 
 At each handoff record branch/commit, deployment SHA, candidate/exposure/review counts, budget spent/reserved, exact model/gate IDs, tests, human feedback and remaining risks. Implementation is not the final experiment result.
