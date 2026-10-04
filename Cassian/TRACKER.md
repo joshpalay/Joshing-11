@@ -25,9 +25,10 @@ Updated 2026-10-04. The original Cassian implementation merged as [#1745](https:
 | Quality + factual gates within pilot | $0.324607 |
 | Explanation-free factual-gate replay | $0.151923 |
 | Answer grading in connected ledger | $0.005977 |
-| Current connected ledger spent | $2.059577 |
+| Answer-only creation trial | $0.449832 |
+| Current connected ledger spent | $2.509409 |
 | Current connected ledger reserved/uncertain | $0 |
-| Remaining authorized lifetime | $7.940423 |
+| Remaining authorized lifetime | $7.490591 |
 
 The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 24 immutable snapshots; the owner answered all 23 available cards and saved 22 overall ratings. The malformed Placeholder card was answered before its allocation fix and remains unrated; one pilot candidate was never shown. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. Six later source-audited, nonduplicate candidates were added to shared stock at the owner's request; their Cassian review records remain separate from gameplay.
 
@@ -43,7 +44,7 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 | C3 First comparison | Owner and source review complete | [Owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md): 20/22 rated Good for appeal, but source-audited keeps are 8/12 Sonnet and 5/12 Haiku. Small sample; no production writer switch. |
 | C4 Below-bonus panel | Admin played in production | The owner answered the available cards in the admin experiment. The earlier protected-preview and production-login issues are historical. No ordinary-player rollout is planned. |
 | C5 Follow-up | Bank baseline measured; rollout sample immature | [Bank supply/reuse](BANK-SUPPLY.md): cross-player reuse is visible, but only two builds followed the confirmed difficulty-rule deployment. Re-measure after at least 20 post-deploy built queues. If a paid learning arm follows, answer-only creation has priority over reference reuse until cache-hit telemetry exists. |
-| C5a Explanation yield | Gate-only replay complete; creation trial pending | [Explanation yield](EXPLANATION-YIELD.md): 24 saved questions replayed without explanations at the factual gate. Three more machine passes, but source audit confirms only one genuine explanation-only recovery; one false original hold and one unsafe new pass. No replacement generation measured yet. |
+| C5a Explanation yield | Replay and bounded creation trial complete | [Explanation yield](EXPLANATION-YIELD.md): 24 saved questions replayed without explanations at the factual gate; source audit confirmed only one genuine explanation-only recovery. In the [creation trial](ANSWER-ONLY-CREATION.md), both arms produced one independently usable question for three topic targets after capped replacements. No explanation-only control hold occurred; answer-only cost more in total despite a lower per-attempt cost. No production change. |
 | C6 Final report | Pending | Human quality, cost per accepted unique question, topic coverage, latency, fixed-workload monthly feasibility and budget left. |
 
 ## Current caveats
@@ -76,11 +77,12 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 - 2026-10-04: Verified PR #1744's production deployment time (17:28:30 UTC) and ran a read-only [bank supply/reuse audit](BANK-SUPPLY.md). Only two actual built queues followed rollout, with zero loosened picks, so no benefit claim is possible. Across 143 active declared player/domain pairs, 22 currently lack eligible basic stock; exact fact/text grouping shows 340 bank question groups placed for multiple users. The reusable audit script prints only aggregates. Current workload-normalized costs and caveats are in ignored private notes. No paid Cassian call or production rule change.
 - 2026-10-04: Split future post-rating feedback into a question disposition (Keep/Revise/Reject/Unsure) and a separate judgment of whether the machine's pass/hold decision was correct (Yes/No/Unsure). A candidate-specific post-gate note prevents question corrections being stored as generic missing-topic feedback. The initial blind rating and legacy stored `gateReview` data remain intact; new fields are distinct. TypeScript and focused lint passed; authenticated submission of the new fields remains untested.
 - 2026-10-04: PR #1750 merged at `563a637e54a3a57f60e48edc68ee3c565a128ff5`; its production deployment reported success at 18:56:40 UTC. The split feedback form is deployed, but no new candidate card is available for an authenticated submission test. No paid calls were made for the bank audit or form fix.
+- 2026-10-04: Completed a three-topic, two-arm answer-only [creation trial](ANSWER-ONLY-CREATION.md) using saved source packets and the same Sonnet writer. Five control and six answer-only attempts, one independently usable question in each arm, two topic targets unfilled in each. The run spent $0.449832, with $0 reserved; lifetime total $2.509409. No explanation-only control hold or attributable replacement saving appeared. A source review found quality-gate false holds and an overconfident factual rejection on a disputed narrow-topic claim. All 11 question/source audits and the resumable runner are in ignored private workspace storage. No candidate was published or shown to a player.
 
 ## Next exact actions
 
 1. After at least 20 builds on PR #1744's production version, re-run `scripts/cassian-bank-audit.ts` and inspect per-build bank attempts, real final placements, new generation calls and ready time. The initial two-build sample is too small for a decision.
-2. If using more of the paid Cassian budget, implement and run a small answer-only creation comparison with the same source packets, writer model, novelty rules, quality/factual checks and fixed independently usable target. The existing saved-question replay cannot measure writer or replacement savings. Record replacements and unfilled targets under the existing $10 ledger.
+2. Review the quality-gate false holds and broad-topic generic passes documented in the answer-only creation trial. Keep production prompts and gates unchanged until a larger, source-audited comparison supports a concrete adjustment. No additional paid run is needed now.
 3. Check the deployed split feedback form with an authenticated admin when a future review card exists, before relying on its new feedback fields. Keep the ordinary game and no-repeat rules unchanged; no writer rollout is justified by the small pilot.
 
 At each handoff record branch/commit, deployment SHA, candidate/exposure/review counts, budget spent/reserved, exact model/gate IDs, tests, human feedback and remaining risks. Implementation is not the final experiment result.
