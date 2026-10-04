@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 vi.mock('@/server/db', () => ({ pool: {} }));
 vi.mock('../grade', () => ({ gradeCassianAnswer: vi.fn() }));
 import { alreadySeen, publicCard } from '../review';
+import { isReviewableCandidate } from '../candidate-validity';
 
 const candidate = {
   id: 'a'.repeat(32), domain: 'Test domain', breadth: 'niche', difficulty: 'moderate',
@@ -48,5 +49,14 @@ describe('Cassian exposure checks', () => {
     expect(firstSql).toContain('"CassianReview"');
     expect(firstSql).not.toMatch(/\bLIMIT\b/);
     expect(String(query.mock.calls[1][0])).toContain('"DailyQueue"');
+  });
+});
+
+describe('Cassian pilot candidate validity', () => {
+  it('withholds unusable answer keys and explanations while retaining held candidates with real keys', () => {
+    expect(isReviewableCandidate(candidate)).toBe(true);
+    expect(isReviewableCandidate({ ...candidate, answer: ' Placeholder ' })).toBe(false);
+    expect(isReviewableCandidate({ ...candidate, explainer: 'TBD' })).toBe(false);
+    expect(isReviewableCandidate({ ...candidate, answer: ' ' })).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import { pool } from '@/server/db';
 import { normalizeForMatch } from '@/server/answers/match-normalization';
 import { sameFactAnswerKey } from '@/server/daily/answer-cooldown';
 import { gradeCassianAnswer } from './grade';
+import { isReviewableCandidate } from './candidate-validity';
 
 type CandidateRow = {
   id: string; domain: string; breadth: string; difficulty: string;
@@ -137,7 +138,7 @@ export async function nextCassianCard(userId: string): Promise<CassianCard | nul
       FROM "CassianReview" r JOIN "CassianCandidate" c ON c.id = r.candidate_id
       WHERE r.admin_user_id = $1 AND r.rating IS NULL
       ORDER BY r.shown_at DESC LIMIT 1`, [userId]);
-    if (pending.rows[0]) {
+    if (pending.rows[0] && isReviewableCandidate(pending.rows[0])) {
       await client.query('COMMIT');
       return publicCard(pending.rows[0]);
     }
@@ -147,6 +148,7 @@ export async function nextCassianCard(userId: string): Promise<CassianCard | nul
         WHERE r.candidate_id = c.id AND r.admin_user_id = $1)
       ORDER BY md5($1 || c.id)`, [userId]);
     for (const candidate of candidates.rows) {
+      if (!isReviewableCandidate(candidate)) continue;
       if (await alreadySeen(client, userId, candidate)) continue;
       const inserted = await client.query(
         'INSERT INTO "CassianReview" (candidate_id, admin_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
@@ -183,7 +185,8 @@ export async function answerCassianCard(userId: string, candidateId: string, sub
   const submittedNormalized = normalizeForMatch(submitted);
   const accepted = [original.answer, ...(Array.isArray(original.acceptable_variants) ? original.acceptable_variants : [])];
   const correct = Boolean(submittedNormalized) && accepted.some((answer) => normalizeForMatch(answer) === submittedNormalized);
-  const grade = correct ? { result: 'correct', via: 'exact_or_variant' }
+  const grade = !isReviewableCandidate(original) ? { result: 'needs_review', via: 'invalid_candidate' }
+    : correct ? { result: 'correct', via: 'exact_or_variant' }
     : !submittedNormalized ? { result: 'gave_up', via: 'empty_answer' }
       : await gradeCassianAnswer({
         runId: original.run_id, manifestSha: original.manifest_sha ?? '', userId, candidateId,
