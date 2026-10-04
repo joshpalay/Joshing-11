@@ -45,6 +45,8 @@ For each requested slot retain success, parse failure, short output, duplicate, 
 
 After the writer comparison, use the remaining budget for the most informative bounded test: cold/depleted topic-to-ready timing or a cheaper gate policy on identical candidate snapshots. Do not automatically do both if they don't fit. Record why the next test was selected.
 
+The owner also identified a distinct yield lever: an otherwise sound question/key can be rejected solely because its optional explanation is wrong, forcing replacement generation. [EXPLANATION-YIELD.md](EXPLANATION-YIELD.md) records the bounded saved-question replay and its source-audited interpretation. If this becomes the next paid comparison, compare explanation-bearing and answer-only **creation** at a fixed target number of independently usable, novel questions. Count replacement rounds and extra retrieval, not just output tokens or raw gate passes; retain factual checking of the question/key and keep production unchanged during the comparison.
+
 Cold = no eligible stock/no saved source packet in an isolated benchmark; depleted = stock exists but all is in the simulated recipient's seen history; warm = unseen eligible stock/source cache exists. Do not delete production cache or real history to manufacture these states.
 
 Timestamp topic request, resolution, scheduling, retrieval, generation, gates/dedup and first eligible persisted/display-ready candidate. Report total and stages, p50/p95 where sample size supports them, timeouts and no-result rate. No broad substitutions or repeats count as fulfilled requests.
