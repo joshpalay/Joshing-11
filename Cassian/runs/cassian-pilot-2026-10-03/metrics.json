@@ -57,5 +57,25 @@
   ],
   "totalUsd": 1.900013,
   "reservedUsd": 0,
+  "noExplanationGateReplay": {
+    "date": "2026-10-04",
+    "savedCandidates": 24,
+    "oldCoreGateEligible": 10,
+    "newCoreGateEligible": 13,
+    "newlyMachineEligible": 3,
+    "newlyHeld": 0,
+    "oldFactualDrops": 7,
+    "newFactualDrops": 5,
+    "invalidVerdicts": 0,
+    "replayFactualGateUsd": 0.151923,
+    "originalFactualGateUsd": 0.197073,
+    "independentlyAuditedNewlyEligible": {
+      "explanationOnlyRecovery": 1,
+      "originalGateFalseRejection": 1,
+      "questionStillInvalid": 1
+    },
+    "replacementCallsMeasured": false,
+    "writerWithoutExplanationMeasured": false
+  },
   "limitation": "Core gates only; no human quality verdict or live-player topic-to-ready timing."
 }
