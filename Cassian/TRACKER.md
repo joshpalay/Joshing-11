@@ -5,6 +5,7 @@ Updated 2026-10-04. Current follow-up branch `codex/cassian-explanation-yield`; 
 ## Owner decisions
 
 - Desired ongoing game LLM cost: $5/month, aspirational. Report cost per accepted question and per player-day at a fixed workload.
+- Future pricing idea only: approximately 200 normal answered questions free, then a monthly subscription. No price or paywall decision yet. See [FUTURE-PRICING.md](FUTURE-PRICING.md); Cassian cards never count toward the proposed allowance.
 - Authorized incremental experiment cap: $10 total across runs, retrieval, gates, grading and failures. First run aimed below $4.
 - Admin-only Cassian card after all regular and bonus Daily Five questions; visually designated as an experiment.
 - Answer normally, then rate Good/Fix/Reject/Unsure and all optional dimensions, corrections and panel feedback.
@@ -69,6 +70,7 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 - 2026-10-03: User confirmed an admin session is signed in on this computer. Browser QA attempted in Chrome; the protected preview returned Chrome's `ERR_BLOCKED_BY_CLIENT` before rendering the app. No card was answered or rated. A read-only connected-schema check still showed 24 candidates and zero reviews. The latest PR head built and had green CI/Vercel checks, but this does not substitute for signed-in admin UX QA.
 - 2026-10-03: The branch-style preview alias previously shared with the owner returned 404. GitHub's deployment status for head `8b59398f` instead reports the immutable deployment URL `https://joshing-11-debxi3rzo-joshuapalay-5402s-projects.vercel.app`. The owner can see the preview but cannot complete phone login without a production-delivered SMS code. The production and preview session cookies are host-scoped; whether the preview OTP request fails or merely lacks delivery is awaiting owner clarification. Do not request or record an OTP value.
 - 2026-10-04: Added an explanation-free factual-gate replay over the 24 immutable pilot snapshots. The first API request returned provider 400 before inference because Sonnet 5.5 deprecated `temperature`; the exact $0.03 reservation was reconciled at $0, and the corrected runner used the existing model-parameter sanitizer and a new ledger key. All 24 calls completed for $0.151923 with no unresolved reservation. Source-audited the three newly machine-eligible items: one genuine explanation-only recovery, one false original hold, one unsafe new pass. Added [EXPLANATION-YIELD.md](EXPLANATION-YIELD.md) with fixed-target replacement-cost and latency measures for the next creation trial. No normal-game change or candidate exposure occurred from this replay.
+- 2026-10-04: Recorded the owner's future 200-free-questions/monthly-subscription hypothesis in [FUTURE-PRICING.md](FUTURE-PRICING.md). Existing answer, build, and usage records support an initial read-only cohort-cost report; shared-bank amortization and calls outside a build need attribution review. No Cassian schema, paywall, allowance counter, or payment integration was added.
 
 ## Next exact actions
 
