@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2225,6 +2225,79 @@ bonus worth its cost) remains open and unresolved.
 1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
    against `#1734`'s conflict strategy — now **three** reviews overdue.
 2. Trace the nineteen outsized/elevated-residual builds — needs Vercel
+   function logs. All-time-high residual still `90da8604-…` (82.9s,
+   2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
+3. Watch for a third `deferred: false` occurrence — still only two on
+   record.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-04 (diagnosis-review) — four new built rows from the 2026-10-03 cron, one new outlier; outlier share flat at ~⅓; `verify:build-latency-anomaly` now four reviews overdue; no code touches the persist mechanism
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installs cleanly but `DATABASE_URL` is still absent, so
+`npm run check:build-latency` can't run directly — reproduced the exact
+`saved`/`bonus`/`residual` computation in SQL (summing `rounds[phase=
+'bonus'].generationMs` per row via `jsonb_array_elements`) directly against
+`DailyBuildMetric`, same formula `build-latency-check.mjs` uses.
+`verify:build-latency-anomaly` is write-capable and stays unrun per this
+doc's own §7 convention — now overdue for a **fourth** consecutive review.
+
+**`DailyBuildMetric` totals:** `built=63` (up from 59), `carry_forward=640`,
+`existing_queue=68`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Four new rows, all from the 2026-10-03 17:05 UTC cron:**
+
+| build_id | span_ms | user_visible_ms | saved | bonus | residual |
+|---|---:|---:|---:|---:|---:|
+| `8cbea7bf-…` | 59,538 | 45,138 | 14,400 | 8,793 | 5,607 — normal band |
+| `34e4d4fb-…` | 53,070 | 51,380 | 1,690 | 796 | 894 — normal band |
+| `affdcdd4-…` | 68,457 | 47,131 | 21,326 | 16,427 | 4,899 — large-bonus-itself shape, not an outlier |
+| `5c406183-…` | 66,636 | 37,297 | 29,339 | 7,764 | **21,575 — outlier-class** |
+
+**One of four is a clean new outlier** (`5c406183-…`): 7,764ms of bonus
+generation paired with 21,575ms of unexplained residual, the established
+small-bonus/huge-residual shape. `affdcdd4-…` repeats the "large bonus
+itself, not small-bonus/huge-residual" shape seen repeatedly before
+(`4332883f-…`, `8e98f96e-…`, `b6477f44-…`).
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+population, not estimated:** `n=60` (up from 56), **20 of 60 (33.3%)** —
+essentially flat versus yesterday's 19/56 (34%).
+
+**3b population: median saving 16,704.5ms** (n=60) — recomputed directly
+via SQL over the full `deferred:true` population; the value is
+byte-identical to yesterday's reading at n=56, a coincidence of where the
+new rows land in the distribution, not a stale number (reproduced fresh,
+not carried forward).
+
+**No third `deferred: false` occurrence** — all four new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**Phase 3a (mechanism) holds** on all four new rows: `saved ≥` each row's
+own bonus `generationMs`.
+
+**No commits touch this doc's tracked mechanism since yesterday.** The only
+commits since the last review are `#1743`/`#1744` (bank-difficulty-
+loosening work, new doc opened for it today) and two unrelated "Cassian"
+pilot commits. Diffed `#1743`/`#1744` directly: `#1743` touches only
+`pickBankSource`/`bankMissReasonFromCounts` in `src/server/db/queries/daily.ts`
+— zero references to `persistDailyQueue` (grepped the diff). `#1744` adds
+new `BankAttempt` fields and `bankLooseTierMaxPerBuild`/`bankLooseTiers` to
+`build-context.ts` and `generate-questions.ts` — additive fields alongside
+the existing ones, not a change to `persistDailyQueue`'s conflict strategy
+or `queue-orchestrator.ts`'s race-check logic (also grepped, zero matches).
+
+**No decision-resolving change.** Status stays `active`. Question 4 (is the
+bonus worth its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **four** reviews overdue.
+2. Trace the twenty outsized/elevated-residual builds — needs Vercel
    function logs. All-time-high residual still `90da8604-…` (82.9s,
    2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
 3. Watch for a third `deferred: false` occurrence — still only two on

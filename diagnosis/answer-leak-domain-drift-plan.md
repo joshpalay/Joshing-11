@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -2774,4 +2774,96 @@ all exactly where they were.
    528) — recommended since 2026-09-25, still not run.
 5. The three open `ContentReport` rows remain unaddressed, now 27 days old.
 6. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-04 (diagnosis-review) — 27 clean days on `answer_leak_partial`; `answer_leak_any_token` keeps growing; a second, un-tracked cluster of 3 open `ContentReport` rows from the same 2026-09-06 incident surfaces; everything else incremental
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installed cleanly (`npm ci`), but `DATABASE_URL` is still
+absent from `.env` (only `.env.example` present), so `npm run
+check:category-integrity` still can't run directly. Reproduced it
+faithfully: pulled the script's five read-only queries by hand via the
+Supabase MCP connection, cross-checked `nodeKeyMismatches` and `orphanEdges`
+by diffing the full node-key and edge-key sets directly (`comm -23` on the
+two sorted lists — zero orphans), and confirmed `recentMerges` is empty (no
+`domain_merged` events in the last 24h, so `graphSourceMerges = 0`
+trivially). **Verdict: `ok`** — zero hard failures. Soft findings unchanged
+in shape from every prior reading (the same `splitKeys` capitalization/
+apostrophe variants and the same 3 Rent/Renaissance-Counterpoint
+`bankKeyMismatches` are visible in the raw label data pulled this session).
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 755 | 0 | 0 |
+| `domain_drift` | 755 | 1 | 0 |
+| `answer_leak_single_word` | 652 | 2 | 0 |
+| `answer_leak_any_token` | 569 | **73** | 0 |
+| `answer_shape` | 755 | 2 | 0 |
+| `quality` | 755 | 292 | 231 (unchanged since yesterday) |
+
+`answer_leak_partial` now at **27 consecutive clean days**, 755 considered
+(up from 714) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 714→755 considered) — the 2026-10-01 hit's Vercel log
+still hasn't been pulled by anyone. `answer_leak_single_word` gained 41
+considered (611→652), no new drop. `answer_leak_any_token` gained 6 more
+drops (67→73, 528→569 considered) — the recommended blind-labeling pass
+(open decision 6) remains unrun, now further past the ~13-hit threshold
+than ever. `quality`'s `failed_open` stays flat at 231 — no further
+recurrence of the 2026-10-02 `daily_build`-scope event found yesterday.
+
+**A second, previously untracked cluster of open `ContentReport` rows
+surfaces from the same incident.** Querying all `ContentReport` rows filed
+before 2026-09-07 (rather than just the 3 ids this doc's Updates have named
+by id on every prior review) turns up **3 more rows, all still
+`status='open'`**, all filed 2026-09-06T17:10:33Z — same timestamp cluster,
+a few seconds apart: `b1804847…` (Food Chemistry "Tears"), `3c3f9989…`
+(Progressive Era "19th Amendment"), `815b3ad8…` (Joyce/Claritas filed under
+Woolf). These are exactly the "three more bad rows" the 2026-09-06 (evening)
+entry above describes filing into the reports queue — but every subsequent
+Update in this doc has only ever named and counted the *first* three
+(`139e1932…`, `800c44a3…`, `357618e3…`) when saying "the three open
+`ContentReport` rows remain unaddressed." **All six 2026-09-06 rows are
+confirmed still open**, all now **28 days** since filing. Not resolving or
+acting on this (not this doc's action item either way — Josh's queue to
+clear) — flagging it because the "three" framing repeated in every prior
+Update understated the actual count by half.
+
+**Bank `still_servable` (is_duplicate=false): 2,643**, up from 2,615 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** The only commits since
+the last review's commit are `#1743` and `#1744` (the bank-difficulty-
+loosening work, reviewed in its own new doc today) plus two unrelated
+"Cassian" pilot commits. Diffed `#1743` and `#1744` directly: `#1743`
+touches only `pickBankSource`/`bankMissReasonFromCounts` in
+`src/server/db/queries/daily.ts`; `#1744` adds `bankLooseTierMaxPerBuild`/
+`bankLooseTiers`/`loosenedBankPicksSoFar`/`noteLoosenedBankPick` to
+`build-context.ts` and `generate-questions.ts`. Grepped both diffs for
+`SYSTEM_PROMPT`, `QUALITY_GATE_SYSTEM_PROMPT`, `persistDailyQueue`,
+`isDomainDriftDropEnabled`, `findQualityFailures`, and `answer_leak` — zero
+matches in either. Neither `self-answering.ts` nor
+`off-domain-second-opinion.ts` changed.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment. Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were.
+
+### Next steps (unchanged, plus the ContentReport correction)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 27+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 73 of
+   569) — recommended since 2026-09-25, still not run.
+4. **Corrected:** six (not three) open `ContentReport` rows trace to the
+   2026-09-06 incident, all 28 days old and unaddressed — not this doc's
+   action item, but future entries should count all six, not just the
+   first three named.
+5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

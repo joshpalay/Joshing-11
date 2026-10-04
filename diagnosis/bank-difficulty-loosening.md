@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -150,3 +150,80 @@ whether the easier questions felt wrong.
 Opened. Loosened rule built on `feat/bank-difficulty-loosening` (PR #1744) with the
 off switch and per-pick flag. Queries Q1–Q3 run read-only against prod and
 return the §4 baseline. Nothing live until #1744 merges and deploys.
+
+### 2026-10-04 (diagnosis-review) — first review since open; both PRs confirmed merged, but the loosening hasn't had a chance to fire yet; #1743's honest miss-reason labels show up for the first time on 2026-10-03
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**PR state, confirmed via the GitHub API directly, not inferred from git
+log:** `#1743` ("fix(daily): honest bank-miss reasons + loosen the bank
+difficulty rule") merged to `main` **2026-10-03T15:57:01Z**; `#1744`
+("feat(daily): loosen the bank difficulty rule by one pick per build")
+merged to `main` **2026-10-03T17:27:20Z**. Diffed both directly rather than
+trusting titles: `#1743` touches only `pickBankSource` /
+`bankMissReasonFromCounts` in `src/server/db/queries/daily.ts` (the honest
+miss-reason telemetry); `#1744` adds `bankLooseTierMaxPerBuild` /
+`bankLooseTiers` to `generate-questions.ts` and new `BankAttempt` fields /
+`loosenedBankPicksSoFar` / `noteLoosenedBankPick` to `build-context.ts`
+(the loosening itself). Matches this doc's own §1/§2 description exactly.
+
+**The loosening has not yet had a chance to fire in production.** The
+2026-10-03 cron runs at 17:05 UTC; `#1744` deployed at 17:27:20Z — *after*
+that day's cron had already run. Q1, run for the trailing 14 days, shows
+`loosened: 0` and `builds_loosened: 0` on **every** day including
+2026-10-03 itself, and no 2026-10-04 row exists yet in this query. This is
+expected, not a problem: the first build that could possibly show a
+loosened pick is the next cron run after the 17:27 UTC deploy, which this
+session has not yet observed.
+
+**Q1 — pre-loosening baseline, reconfirmed over the trailing 14 days
+(2026-09-20 through 2026-10-03):** 179 hits / 231 misses across the window
+(43.7% blended hit rate), consistent with the §4 baseline's ~42% — no
+anomaly, as expected since no loosened code has run yet. Day-to-day hit
+rate is noisy (21.4%–67.6%), same volatility the doc's own §7
+recommendation anticipated ("volume is small, expect noisy numbers").
+
+**Q2 — gen_calls_per_build, reconfirmed:** ranges 2.00–6.00 across the
+window, consistent with the ~3.2 baseline given the small per-day sample
+(1–4 builds/day); no anomaly.
+
+**New finding, directly relevant to this doc's own §5 checks: the honest
+`missReason` labels from `#1743` appear for the first time on
+2026-10-03** (the day it merged), and the mix looks different from every
+prior day's guessed labels:
+
+| day | miss_reason | count |
+|---|---|---:|
+| 2026-10-03 | `fact_history` | 1 |
+| 2026-10-03 | `filtered` | 11 |
+| 2026-10-03 | `no_stock` | 6 |
+| 2026-10-03 | `tier` | 6 |
+
+Every prior day in the 14-day window shows only `no_stock`/`tier` (the
+guessed pre-#1743 labels this doc's §5 explicitly warns not to compare
+across the deploy boundary). On the first honest day, `tier` is only 6 of
+24 misses (25%) — much smaller than the pre-change read implied `tier`
+alone explained the bulk of misses — and `filtered` (a label that didn't
+exist before `#1743`) is the single largest category at 11 of 24 (46%).
+One day is not a trend, and this is exactly the caveat this doc's §5
+already names ("rows recorded before #1743 deployed have guessed
+`missReason` labels... only compare rows after those deploy dates") — but
+it's worth flagging precisely since it's the first real data point for
+decision 1's eventual read, once a few more honest-labeled days
+accumulate.
+
+**Not resolving anything.** The exit criteria (§6) require ≥14 days live
+with the loosening actually firing; today is day 0 of that window and no
+loosened pick has been observed yet. Status stays `active`.
+
+### Next steps
+1. Confirm the loosening actually fires on the next cron after the
+   2026-10-03T17:27:20Z deploy — re-run Q1 and look for the first
+   `loosened: true` pick.
+2. Once loosened picks start appearing, begin the ≥14-day live-measurement
+   clock for the §6 exit criteria.
+3. Keep watching the honest `missReason` mix (`#1743`) accumulate more
+   days before reading anything into the 2026-10-03 split.
+4. Q3 (loosened-pick correct-rate) has nothing to measure yet — no
+   loosened picks exist.
