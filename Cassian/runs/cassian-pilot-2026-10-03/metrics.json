@@ -1,6 +1,6 @@
 {
   "runId": "cassian-pilot-2026-10-03",
-  "status": "machine_screened_human_review_pending",
+  "status": "owner_review_complete_vetted_bank_promotion",
   "topics": 12,
   "candidateSnapshots": 24,
   "arms": [
@@ -12,7 +12,7 @@
       "held": 6,
       "parseFailed": 0,
       "withSource": 12,
-      "humanReviewed": 0
+      "humanReviewed": 11
     },
     {
       "arm": "candidate",
@@ -22,7 +22,7 @@
       "held": 8,
       "parseFailed": 0,
       "withSource": 12,
-      "humanReviewed": 0
+      "humanReviewed": 11
     }
   ],
   "stages": [
@@ -95,7 +95,16 @@
       "candidate": 0.176876
     },
     "cassianLedgerSpentUsd": 2.059577,
-    "cassianLedgerReservedUsd": 0
+    "cassianLedgerReservedUsd": 0,
+    "bankPromotion": {
+      "date": "2026-10-04",
+      "bothGatesPassed": 10,
+      "independentlyUsableAsWritten": 8,
+      "addedToSharedBank": 6,
+      "skippedExistingFactOrSemanticDuplicate": 2,
+      "withheldForCorrection": 2,
+      "paidModelCalls": 0
+    }
   },
   "limitation": "The owner supplied appeal ratings, and a separate source audit judged factual quality. The pilot does not measure live-player topic-to-ready timing or long-run writer performance."
 }
