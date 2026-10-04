@@ -224,6 +224,7 @@ export type CassianRating = {
   accuracy?: string; clarity?: string; interest?: string; difficulty?: string;
   topicFit?: string; appropriateness?: string; repetition?: string;
   answerAcceptance?: string; creationSpeed?: string; gateReview?: string;
+  candidateDisposition?: string; gateDecisionReview?: string; postGateNote?: string;
   accuracyIssue?: string; correctedVariants?: string; familiarity?: string;
   note?: string; correctedQuestion?: string; correctedAnswer?: string;
   correctedExplanation?: string; supportingSource?: string;
