@@ -20,3 +20,7 @@ Next: import immutable candidate snapshots, enforce production/Cassian shown his
 ## 2026-10-04 explanation-free gate replay
 
 The saved-question replay described in [EXPLANATION-YIELD.md](../../EXPLANATION-YIELD.md) removed explanations from the factual-gate input and rubric for all 24 saved candidates. It used the same gate model and did not generate new questions. Automatic core-gate passes rose from 10 to 13; independent source audit found that just **one** of the three newly passed items was a genuine explanation-only recovery. One was an original gate false rejection of a correct explanation; one still had a faulty question setup. The replay spent $0.151923, compared with $0.197073 for the original factual-gate calls. This measures a gate-only counterfactual, not replacement-call savings or the cost of writing answer-only questions. The ledger stood at $2.057908 spent and $0 reserved after the replay and twelve answer-grading calls.
+
+## Completed owner review
+
+The owner answered every available Cassian card and saved 22 meaningful overall ratings. The independent source audit and cost-per-usable-question analysis are in [OWNER-REVIEW.md](OWNER-REVIEW.md). The main finding is that both writers produced appealing questions, but the cheaper arm did not lower cost per source-verified question in this small pilot. The malformed Placeholder item was answered before its allocation fix and remains unrated; no further owner action is needed for it. The next measurement is read-only bank supply/reuse before choosing another paid Cassian arm.

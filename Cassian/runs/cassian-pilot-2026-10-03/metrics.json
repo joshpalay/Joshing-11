@@ -77,5 +77,25 @@
     "replacementCallsMeasured": false,
     "writerWithoutExplanationMeasured": false
   },
-  "limitation": "Core gates only; no human quality verdict or live-player topic-to-ready timing."
+  "ownerReview": {
+    "date": "2026-10-04",
+    "shown": 23,
+    "answered": 23,
+    "rated": 22,
+    "ratings": { "Good": 20, "Reject": 1, "Unsure": 1 },
+    "malformedAnsweredUnrated": 1,
+    "unshown": 1,
+    "sourceAudit": {
+      "baseline": { "keep": 8, "revise": 1, "reject": 3 },
+      "candidate": { "keep": 5, "revise": 3, "reject": 4 },
+      "ownerGoodAgainstAudit": { "keep": 12, "revise": 4, "reject": 4 }
+    },
+    "sharedSourceCostPerAuditedKeepUsd": {
+      "baseline": 0.126954,
+      "candidate": 0.176876
+    },
+    "cassianLedgerSpentUsd": 2.059577,
+    "cassianLedgerReservedUsd": 0
+  },
+  "limitation": "The owner supplied appeal ratings, and a separate source audit judged factual quality. The pilot does not measure live-player topic-to-ready timing or long-run writer performance."
 }
