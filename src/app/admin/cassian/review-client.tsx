@@ -163,10 +163,13 @@ export function CassianReviewClient() {
             Check answer
           </button>
         </div> : <div className="mt-5 rounded-lg border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <p className="font-semibold">{card.reveal.result === 'correct' ? 'Correct' : card.reveal.result === 'gave_up' ? 'Answer revealed' : 'Needs grading review'}</p>
+          <p className="font-semibold">{card.reveal.gradedVia === 'invalid_candidate' ? 'Invalid pilot question' : card.reveal.result === 'correct' ? 'Correct' : card.reveal.result === 'wrong' ? 'Not accepted' : card.reveal.result === 'gave_up' ? 'Answer revealed' : 'Needs grading review'}</p>
           <p className="mt-2">Answer: <strong>{card.reveal.answer}</strong></p>
           <p className="mt-2 text-sm">{card.reveal.explainer}</p>
-          {card.reveal.result === 'needs_review' && <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+          {card.reveal.gradedVia === 'invalid_candidate' && <p className="mt-2 text-sm" style={{ color: 'var(--danger)' }}>
+            This candidate has no usable answer key. It will be excluded from further review.
+          </p>}
+          {card.reveal.result === 'needs_review' && card.reveal.gradedVia !== 'invalid_candidate' && <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
             Your wording differs from the key. Mark “My answer should count” below if appropriate.
           </p>}
         </div>}
