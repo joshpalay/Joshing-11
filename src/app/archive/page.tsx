@@ -1,10 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Bookmark, Loader2, Search, Send, X } from 'lucide-react';
+import { Loader2, Search, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { QuestionRatingButtons } from '@/components/games/QuestionRatingButtons';
 import { AnsweredRowActions } from '@/components/questions/AnsweredRowActions';
@@ -349,7 +348,6 @@ export default function ArchivePage() {
 }
 
 function ArchiveCard({ item }: { item: ArchiveItem }) {
-  const [inBank, setInBank] = useState(item.isInBank);
   const canUseActions = item.canUseQuestionActions !== false;
 
   return (
@@ -414,24 +412,12 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
               label=""
               className="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
             />
-            <AddToBankAction
-              questionId={item.questionId}
-              initialInBank={inBank}
-              contextType={item.source === 'joshing_game' ? 'joshing_game' : item.source === 'feed' || item.source === 'sent_to_me' ? 'feed' : 'manual'}
-              contextId={item.id}
-              label=""
-              className="inline-flex size-9 items-center justify-center rounded-md border px-0"
-              onChange={setInBank}
-            />
             <AnsweredRowActions target={{ questionId: item.questionId }} />
           </>
         ) : (
           <div className="flex items-center gap-2 text-muted-foreground">
             <button className="inline-flex size-11 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Send to friend">
               <Send className="size-4" />
-            </button>
-            <button className="inline-flex size-11 items-center justify-center rounded-md border opacity-50" type="button" disabled title="Add to bank">
-              <Bookmark className="size-4" />
             </button>
           </div>
         )}

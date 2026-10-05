@@ -2065,7 +2065,6 @@ function FeedListContent({
               }
             : null
         }
-        isInBank={item.is_in_bank}
         disabled={isBusy}
         onSeeLessOften={() => void seeLessOften(item)}
         onHidePerson={() => void hidePerson(item)}

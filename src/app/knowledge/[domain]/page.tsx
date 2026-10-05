@@ -8,7 +8,6 @@ import { DomainVisibilityToggle, type DomainVisibility } from '@/components/know
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Chip } from '@/components/ui/Chip';
 import { TierProgressBar } from '@/components/progression/TierProgressBar';
-import { AddToBankAction } from '@/components/AddToBankAction';
 import { SendQuestionAction } from '@/components/SendQuestionAction';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
 import type { MasteryTier } from '@/types/db';
@@ -295,15 +294,6 @@ export default function DomainDetailPage() {
                           <SendQuestionAction
                             question={{ id: answer.questionId, text: answer.questionText, domain: detail.displayName }}
                           />
-                          {answer.source === 'joshing_game' ? (
-                            <AddToBankAction
-                              questionId={answer.questionId}
-                              initialInBank={Boolean(answer.isInBank)}
-                              contextType="joshing_game"
-                              label=""
-                              className="inline-flex min-h-10 w-10 items-center justify-center rounded-md border px-0"
-                            />
-                          ) : null}
                         </div>
                       ) : null}
                     </div>

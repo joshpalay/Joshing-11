@@ -53,7 +53,7 @@ const VARIANT_CLASSES: Record<ChipVariant, string> = {
 };
 
 // For a component that renders its own <button> and can't wrap in <Chip>
-// (AddToBankAction, SendQuestionAction) but wants to sit in a chip-styled
+// (e.g. SendQuestionAction) but wants to sit in a chip-styled
 // action row. Keeps the geometry defined in exactly one place — do not
 // hand-copy the recipe string at a call site, that's the R4 pattern this
 // primitive exists to close.

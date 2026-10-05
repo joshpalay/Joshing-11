@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react'
 
-import { AddToBankAction } from '@/components/AddToBankAction'
 import { SendQuestionAction } from '@/components/SendQuestionAction'
 import { visibleFeedCategory } from './category'
 
@@ -24,7 +23,6 @@ export type FeedOverflowMenuProps = {
   sourceName: string
   category?: string | null
   question?: FeedOverflowQuestion | null
-  isInBank?: boolean
   disabled?: boolean
   // Gentle down-weight: nudge this domain to "Blue Moon" (see it rarely) instead
   // of a hard hide. Replaces the old onHideCategory per owner direction.
@@ -41,21 +39,18 @@ export function getFeedOverflowMenuLabels({
   sourceName,
   category,
   hasQuestion,
-  isInBank = false,
 }: {
   sourceName: string
   category?: string | null
   hasQuestion: boolean
-  isInBank?: boolean
 }) {
   const visibleCategory = visibleFeedCategory(category)
   return [
     ...(visibleCategory ? [`See questions about ${visibleCategory} less often`] : []),
     `Hide questions from ${sourceName || 'this person'}`,
-    ...(hasQuestion && !isInBank ? ['Add to bank'] : []),
     ...(hasQuestion ? ['Send to friend'] : []),
     // The content-report items target a question, so they only appear when one
-    // is present — same gate as Add to bank / Send to friend.
+    // is present — same gate as Send to friend.
     ...(hasQuestion ? ['This is incorrect', 'This is inappropriate'] : []),
   ]
 }
@@ -86,7 +81,6 @@ export function FeedOverflowMenu({
   sourceName,
   category,
   question,
-  isInBank = false,
   disabled = false,
   onSeeLessOften,
   onHidePerson,
@@ -181,15 +175,6 @@ export function FeedOverflowMenu({
             <MenuButton disabled={disabled} onClick={wrapAction(onHidePerson)}>
               Hide questions from {sourceName || 'this person'}
             </MenuButton>
-            {question && !isInBank ? (
-              <AddToBankAction
-                questionId={question.id}
-                initialInBank={false}
-                contextType="feed"
-                label="Add to bank"
-                className="hover:bg-muted flex min-h-10 w-full justify-start rounded-xl border-0 px-3 text-left text-sm"
-              />
-            ) : null}
             {question ? (
               <SendQuestionAction
                 question={{

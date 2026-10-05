@@ -17,7 +17,6 @@ import {
 } from 'react'
 
 import { SendQuestionAction } from '@/components/SendQuestionAction'
-import { AddToBankAction } from '@/components/AddToBankAction'
 import { AuthorName } from '@/components/AuthorName'
 import { EditorialBadge } from '@/components/EditorialBadge'
 import { Chip, chipButtonClassName } from '@/components/ui/Chip'
@@ -919,15 +918,6 @@ function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: (
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-1 border-t border-[var(--brand-border)] pt-3 text-muted-foreground">
-        {question.bankQuestionId ? (
-          <AddToBankAction
-            questionId={question.bankQuestionId}
-            initialInBank={question.isInBank}
-            contextType="manual"
-            label="Save"
-            className={chipButtonClassName({ className: 'border-0 bg-transparent text-muted-foreground' })}
-          />
-        ) : null}
         <Chip
           aria-label="Love this question"
           selected={rating === 'thumbs_up'}
@@ -1045,15 +1035,6 @@ function QuestionCardOverflowMenu({
         >
           Hide from feed
         </button>
-        {question.bankQuestionId ? (
-          <AddToBankAction
-            questionId={question.bankQuestionId}
-            initialInBank={question.isInBank}
-            contextType="manual"
-            label="Save to question bank"
-            className="hover:bg-muted flex min-h-11 w-full justify-start rounded-xl border-0 px-3 text-left text-sm"
-          />
-        ) : null}
         {canReport ? (
           <>
             <button

@@ -39,12 +39,6 @@ vi.mock('lucide-react', () => ({
   X: () => <span aria-hidden="true" />,
 }))
 
-vi.mock('@/components/AddToBankAction', () => ({
-  AddToBankAction: ({ label }: { label: string }) => (
-    <button type="button">{label}</button>
-  ),
-}))
-
 vi.mock('@/components/SendQuestionAction', () => ({
   SendQuestionAction: ({ label }: { label: string }) => (
     <button type="button">{label}</button>
@@ -598,13 +592,12 @@ describe('Feed card category and overflow affordances', () => {
     ).not.toContain('GENERAL KNOWLEDGE')
   })
 
-  it('omits Add to bank from overflow choices for already-banked questions', () => {
+  it('lists the overflow choices for a question (no Add to bank — Save was retired)', () => {
     expect(
       getFeedOverflowMenuLabels({
         sourceName: 'Maya',
         category: 'Literature',
         hasQuestion: true,
-        isInBank: true,
       })
     ).toEqual([
       'See questions about Literature less often',

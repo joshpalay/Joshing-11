@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Check, MoreHorizontal, Sparkles, X } from 'lucide-react'
 
 import { answerHeadingStyle } from '@/components/answer-heading'
@@ -55,7 +55,6 @@ type AnswerFeedbackSheetProps = {
   onClose: () => void
 }
 
-type BankState = 'idle' | 'saving' | 'saved' | 'undoing' | 'undone' | 'error'
 type RecheckState = 'idle' | 'submitting' | 'done' | 'error'
 
 export function AnswerFeedbackSheet({
@@ -72,8 +71,6 @@ export function AnswerFeedbackSheet({
   authorIsHouse = false,
   openedNewTerritory = false,
   openedTerritoryDomain = null,
-  questionId,
-  feedItemId,
   unverified = false,
   onRecheck = null,
   report = null,
@@ -82,8 +79,6 @@ export function AnswerFeedbackSheet({
   const visibleCategory = visibleFeedCategory(category)
   const showNewTerritory = openedNewTerritory && isCorrect
   const showTerritoryUndo = Boolean(openedTerritoryDomain) && isCorrect
-  const [bankState, setBankState] = useState<BankState>('idle')
-  const hasAutoSavedRef = useRef(false)
   const [recheckState, setRecheckState] = useState<RecheckState>('idle')
   const [recheckMessage, setRecheckMessage] = useState<string | null>(null)
   const [recheckAccepted, setRecheckAccepted] = useState(false)
@@ -100,47 +95,6 @@ export function AnswerFeedbackSheet({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
-
-  useEffect(() => {
-    if (isCorrect || hasAutoSavedRef.current) return
-    hasAutoSavedRef.current = true
-    setBankState('saving')
-    void (async () => {
-      try {
-        const response = await fetch('/api/bank', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            questionId,
-            contextType: 'feed',
-            contextId: feedItemId,
-          }),
-        })
-        if (!response.ok) throw new Error('save failed')
-        setBankState('saved')
-      } catch {
-        setBankState('error')
-      }
-    })()
-  }, [isCorrect, questionId, feedItemId])
-
-  const handleUndo = async () => {
-    if (bankState !== 'saved') return
-    setBankState('undoing')
-    try {
-      const response = await fetch('/api/bank', {
-        method: 'DELETE',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ questionId }),
-      })
-      if (!response.ok) throw new Error('undo failed')
-      setBankState('undone')
-    } catch {
-      setBankState('error')
-    }
-  }
 
   // Opens the "Argue your point" panel; mirrors its outcome into local state
   // so a small persisted note stays on the sheet after the panel closes.
@@ -366,33 +320,6 @@ export function AnswerFeedbackSheet({
                 {recheckMessage}
               </p>
             )
-          ) : null}
-
-          {!isCorrect ? (
-            <div className="text-xs text-muted-foreground">
-              {bankState === 'saving' ? (
-                <span>Saving to your practice bank…</span>
-              ) : null}
-              {bankState === 'saved' ? (
-                <span>
-                  Saved to your practice bank ·{' '}
-                  <button
-                    type="button"
-                    onClick={() => void handleUndo()}
-                    className="inline-flex items-center min-h-11 font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
-                  >
-                    Undo
-                  </button>
-                </span>
-              ) : null}
-              {bankState === 'undoing' ? <span>Undoing…</span> : null}
-              {bankState === 'undone' ? (
-                <span className="text-muted-foreground">Removed from your practice bank.</span>
-              ) : null}
-              {bankState === 'error' ? (
-                <span style={{ color: 'var(--game-wrong-strong)' }}>Could not update your practice bank.</span>
-              ) : null}
-            </div>
           ) : null}
 
           {/* "Knowledge updated" sits at the foot of the reveal: it's a follow-up
