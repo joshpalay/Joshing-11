@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -227,3 +227,66 @@ loosened pick has been observed yet. Status stays `active`.
    days before reading anything into the 2026-10-03 split.
 4. Q3 (loosened-pick correct-rate) has nothing to measure yet — no
    loosened picks exist.
+
+### 2026-10-05 (diagnosis-review) — still zero loosened picks ever, now two cron cycles after deploy; the "tier" miss reason is a small share of the post-deploy mix so far, but the sample is thin
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**The loosening has still never fired, all time.** `SELECT count(*) FROM
+"DailyBuildMetric" m, jsonb_array_elements(m.bank_attempts) a WHERE
+(a->>'loosened')::boolean = true` returns **0** — checked across every row
+ever recorded, not just the trailing-14-day window. Only one cron cycle has
+run since the 2026-10-03T17:27:20Z deploy that this doc's last entry found
+(the 2026-10-04 17:05 UTC cron): two builds, `bd109c6a…` and `88b4457e…`,
+18 total bank attempts between them (8 + 10), `loosened: false` on every
+attempt.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`):**
+`fact_history` 4, `no_stock` 3, `filtered` 1, `tier` **1**. Only one of the
+nine post-deploy misses is the category this rule targets (the ±1 ladder
+finding nothing). That one `tier` miss did not loosen — either the
+2-steps-away tier also had no stock, or it landed on a build that had
+already spent its one-loosened-pick-per-build allowance on an earlier
+attempt (not distinguishable from this query alone). **Not reading this as
+a signal either way** — the whole post-deploy population is one cron cycle
+and nine misses; a single `tier` miss is nowhere near enough to tell
+"the ±1 ladder already covers most of what this was built for" apart from
+"this is just too little data yet." The §4 baseline motivating the change
+(56% of misses had unused stock reachable only two tiers away) was measured
+over 14 days / 213 misses; one day's nine misses can't be compared to it
+directly.
+
+**Q1 (trailing 14 days), re-run:** every day from 2026-09-21 through
+2026-10-04 still shows `loosened: 0, builds_loosened: 0` — including both
+2026-10-03 (deploy day) and 2026-10-04 (the one full cron cycle since).
+Blended hit rate over the window is noisy day to day (hits/misses per day
+range from 3/11 to 25/12), consistent with the doc's own §7 expectation of
+small-volume noise, not itself informative about the loosening since it
+hasn't fired.
+
+**Q2 (gen_calls_per_build), re-run:** 2.00–6.00 across the 14-day window,
+including 5.00 on 2026-10-03 and 3.50 on 2026-10-04 — both inside the
+existing noisy range, no visible shift tied to the deploy (expected, since
+the mechanism it would affect hasn't fired yet).
+
+**Q3 has nothing to measure** — still zero loosened picks, same as every
+prior reading.
+
+**Not resolving anything — explicitly not due.** The §6 exit criteria need
+≥14 days of the loosening actually firing; this doc is at 1 cron cycle
+since deploy with zero fires observed in any of them. Status stays
+`active`. Flagging prominently rather than burying it, since "hasn't had a
+chance to fire yet" (the 2026-10-04 reading) and "fired zero times in the
+one cycle it's had" (today) are different facts worth distinguishing, even
+though neither changes what this doc should do yet.
+
+### Next steps (revised)
+1. Keep watching for the first `loosened: true` pick — still zero, now
+   across two cron cycles (2026-10-03, 2026-10-04) since deploy.
+2. Once loosened picks start appearing, begin the ≥14-day live-measurement
+   clock for the §6 exit criteria.
+3. Watch whether the `tier` miss-reason share stays small as more
+   post-deploy days accumulate, or whether today's one-miss sample was
+   just too thin to read.
+4. Q3 (loosened-pick correct-rate) still has nothing to measure.

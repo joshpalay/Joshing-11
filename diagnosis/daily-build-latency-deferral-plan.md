@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2297,6 +2297,64 @@ bonus worth its cost) remains open and unresolved.
 ### Next steps (unchanged)
 1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
    against `#1734`'s conflict strategy — now **four** reviews overdue.
+2. Trace the twenty outsized/elevated-residual builds — needs Vercel
+   function logs. All-time-high residual still `90da8604-…` (82.9s,
+   2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
+3. Watch for a third `deferred: false` occurrence — still only two on
+   record.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-05 (diagnosis-review) — two new built rows from the 2026-10-04 cron, neither a new outlier; `verify:build-latency-anomaly` now five reviews overdue; no code touches the persist mechanism
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installed cleanly (`npm ci`), but no `.env`/`.env.local` is
+present, so `npm run check:build-latency` can't run directly — reproduced
+the exact `saved`/`bonus`/`residual` computation by pulling every
+`outcome='built'` row with `deferred IS NOT NULL` via the Supabase MCP
+connection and applying the same formula `build-latency-check.mjs` uses.
+`verify:build-latency-anomaly` is write-capable and stays unrun per this
+doc's own §7 convention — now overdue for a **fifth** consecutive review.
+
+**`outcome='lost_persist_race'` is still 0 rows**, cumulative, all time.
+
+**Two new rows, both from the 2026-10-04 17:05 UTC cron:**
+
+| build_id | span_ms | user_visible_ms | saved | bonus | residual |
+|---|---:|---:|---:|---:|---:|
+| `bd109c6a-…` | 47,329 | 33,023 | 14,306 | 608 | 13,698 — normal band |
+| `88b4457e-…` | 55,687 | 41,057 | 14,630 | 13,808 | 822 — large-bonus-itself shape, not an outlier |
+
+**Neither is a new outlier.** `bd109c6a-…`'s residual (13,698ms) sits just
+under the 15,000ms outlier threshold — close, but not over it.
+`88b4457e-…` repeats the "large bonus itself, not small-bonus/huge-residual"
+shape seen repeatedly before (`4332883f-…`, `8e98f96e-…`, `b6477f44-…`,
+`affdcdd4-…`).
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+population:** still **20**, now of **62** (up from 60) — share eases
+slightly to 32.3% from 33.3%, within the established ~⅓ noise band.
+
+**Phase 3a (mechanism) holds** on both new rows: `saved ≥` each row's own
+bonus `generationMs`.
+
+**No third `deferred: false` occurrence** — both new rows show
+`deferred: true`. The two named `deferred: false` rows (`4206ffb0-…`
+09-26, `9c0361e9-…` 09-27) remain the only two on record.
+
+**No commits touch this doc's tracked mechanism since yesterday.** All
+seven commits since the last review are "Cassian" work (a new, unrelated
+admin review tool) — confirmed by diffing each commit's file list directly:
+none touch `queue-orchestrator.ts`, `db/queries/daily.ts`'s persist logic,
+or `build-context.ts`.
+
+**No decision-resolving change.** Status stays `active`. Question 4 (is the
+bonus worth its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **five** reviews overdue.
 2. Trace the twenty outsized/elevated-residual builds — needs Vercel
    function logs. All-time-high residual still `90da8604-…` (82.9s,
    2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
