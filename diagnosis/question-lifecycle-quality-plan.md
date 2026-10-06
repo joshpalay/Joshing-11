@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -1820,5 +1820,90 @@ confirmed by diffing each commit's file list directly.
 4. Keep an eye on `batch_dedup` `failed_open` (27/440, eased slightly on
    the rolling window) and `recent_history` (7/440, eased slightly) — the
    doc's own rolling-window caveat applies, not a reversal of the trend.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-06 (diagnosis-review) — first new `GradeDispute` submission in days (pending 48→49), but still no human-review activity; `batch_dedup`/`recent_history` failed_open tick up again; build p50 eases; `subject_entity` coverage holds; no new code
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installed cleanly (`npm install`), but no `.env`/`.env.local`
+is present, so `npm run check:category-integrity` still needs reproducing
+by hand — see `answer-leak-domain-drift-plan.md`'s 2026-10-06 entry
+(reviewed the same session) for the full verdict (`ok`, no hard failures)
+and detail; not repeated here since the check is shared across all five
+diagnosis docs.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 450 | 48 | 7 |
+| `batch_dedup` | 450 | 23 | 27 |
+| `quality` | 450 | 173 (38.4%) | 1 |
+
+`considered` rose 440→450 (one new day's worth of `daily_build`-scope
+traffic entering the trailing window) while `recent_history`'s and
+`batch_dedup`'s `failed_open` held exactly flat (7 and 27) — the new day
+added no fresh failed-open events on either counter. `quality`'s
+`failed_open` also holds flat at 1 (the 2026-10-02 event remains the only
+one in the 14-day window). `quality`'s scoped drop rate (38.4%) stays
+inside the acceptable band, unchanged from the last reading.
+
+**`#1702` dispute queue: first new submission since this doc started
+tracking day-to-day — but not new resolution activity.** `GradeDispute`
+status counts (all-time): `pending` **49** (up from 48), `alternative_added`
+32 (unchanged), `dismissed` 5 (unchanged). The new row (`1a72813a-…`,
+created 2026-10-05T17:14:13Z) is a Batman "Victor Freeze" vs. "Victor
+Fries" dispute — already carries an automated `review_decision='reject'`
+("'Freeze' is the villain's codename, so 'Victor Freeze' is a different
+name rather than a valid alternate spelling") but `reviewed_at` is still
+`null`, so it sits in the `pending` bucket pending whatever confirms an
+automated reject into a terminal status, same shape as the other
+unresolved `pending` rows already in the queue. **No human-review
+activity**: `max(reviewed_at)` across the whole table is still
+2026-10-02T00:17:52Z (the Meredith Willson "piccolo" automated
+self-resolution) — correcting a discrepancy in some prior entries' wording
+("still the 2026-09-27 automated-recheck timestamp"), which was already
+stale by the time it was written; the actual latest `reviewed_at` has been
+2026-10-02's event since that date, not 2026-09-27. Not pursuing the
+correction further — doesn't change decision 4's standing (still no
+human-reviewed dispute to build Phase 4's labeled set from).
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0** newly-generated rows missing it
+since that timestamp, re-queried directly.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+36,317ms** (n=44, down from 37,297ms at n≈39 last review) — easing
+slightly but still well above the 25,243ms pre-deploy baseline. Cross-
+checked against `daily-build-latency-deferral-plan.md`'s 2026-10-06 entry
+(read, not re-derived): that doc's outlier/elevated-residual share also
+eased slightly (32.3%→31.7%), and its own headline finding this
+pass — a third `deferred: false` row — is unrelated to this doc's p50
+reading. The standing explanation for the elevated p50 (the untraced
+outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log --since=2026-10-05`
+on all five returns nothing.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`. The new `GradeDispute` submission is a data point, not a
+resolution — decision 4 remains exactly where it was.
+
+### Next steps (revised)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data (the new 2026-10-05 submission is
+   pending, not reviewed).
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s rolling-window `failed_open` (flat at 1) stays
+   isolated or recurs again.
+4. Keep an eye on `batch_dedup` `failed_open` (27/450, flat) and
+   `recent_history` (7/450, flat) on the rolling 14-day window.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

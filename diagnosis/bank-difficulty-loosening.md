@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -289,4 +289,55 @@ though neither changes what this doc should do yet.
 3. Watch whether the `tier` miss-reason share stays small as more
    post-deploy days accumulate, or whether today's one-miss sample was
    just too thin to read.
+4. Q3 (loosened-pick correct-rate) still has nothing to measure.
+
+### 2026-10-06 (diagnosis-review) — still zero loosened picks ever, now two full post-deploy cron cycles; the `tier` miss-reason share stayed flat (still just 1) while other reasons grew
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**The loosening has still never fired, all time.** `SELECT count(*) FROM
+"DailyBuildMetric" m, jsonb_array_elements(m.bank_attempts) a WHERE
+(a->>'loosened')::boolean = true` returns **0** — checked across every row
+ever recorded. Two full cron cycles have now run since the
+2026-10-03T17:27:20Z deploy (2026-10-04: 27 builds; 2026-10-05: 26 builds),
+both confirmed `loosened: 0` in the per-attempt data — current server time
+at this review (2026-10-06 06:26 UTC) is before today's ~17:05 UTC cron, so
+today's build hasn't run yet.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 9 (up from 4), `no_stock` 4 (up from 3), `filtered`
+1 (unchanged), `tier` **1 (unchanged)** — the one `tier` miss is still the
+same single occurrence the 2026-10-05 entry found; neither of the two new
+cron cycles added another. Fifteen total post-deploy misses now, still only
+one in the category this rule targets. **Not reading this as a signal
+either way, same caution as the last two reviews** — the mechanism needs a
+`tier` miss AND unused stock two tiers away AND an unspent per-build
+allowance to actually fire, and the data so far says `tier` misses
+themselves are rare in this window, not that the mechanism is broken.
+
+**Q1 (trailing 14 days), re-run:** every day from 2026-09-22 through
+2026-10-05 still shows `loosened: 0, builds_loosened: 0`. Blended hit rate
+remains noisy day to day (21.4%–67.6%), including 2026-10-04 (50.0%) and
+2026-10-05 (66.7%) — both inside the existing noisy range, consistent with
+the doc's own §7 expectation, not itself informative since the loosening
+hasn't fired.
+
+**Q2 (gen_calls_per_build), re-run:** 2.00–6.00 across the 14-day window,
+including 3.50 on 2026-10-04 and 2.50 on 2026-10-05 — both inside the
+existing noisy range, no visible shift tied to the deploy.
+
+**Q3 has nothing to measure** — still zero loosened picks.
+
+**Not resolving anything — explicitly not due.** The §6 exit criteria need
+≥14 days of the loosening actually firing; this doc is at 2 cron cycles
+since deploy with zero fires observed in either. Status stays `active`.
+
+### Next steps (unchanged)
+1. Keep watching for the first `loosened: true` pick — still zero, now
+   across two full post-deploy cron cycles (2026-10-04, 2026-10-05).
+2. Once loosened picks start appearing, begin the ≥14-day live-measurement
+   clock for the §6 exit criteria.
+3. Watch whether the `tier` miss-reason share stays small (still just 1 of
+   15 post-deploy misses) as more days accumulate.
 4. Q3 (loosened-pick correct-rate) still has nothing to measure.

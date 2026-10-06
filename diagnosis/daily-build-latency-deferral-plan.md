@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2360,5 +2360,88 @@ bonus worth its cost) remains open and unresolved.
    2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
 3. Watch for a third `deferred: false` occurrence — still only two on
    record.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-06 (diagnosis-review) — a THIRD `deferred: false` row lands, same shape as the first (not the second); two new built rows, neither a new outlier; `verify:build-latency-anomaly` now six reviews overdue; no code touches the persist mechanism
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+`node_modules` installed cleanly (`npm install`), but no `.env`/`.env.local`
+is present, so `npm run check:build-latency` can't run directly —
+reproduced the exact `saved`/`bonus`/`residual` computation in SQL
+(`jsonb_array_elements` over `rounds` filtered to `phase='bonus'`), same
+formula `build-latency-check.mjs` uses. `verify:build-latency-anomaly` is
+write-capable and stays unrun per this doc's own §7 convention — now
+overdue for a **sixth** consecutive review.
+
+**`DailyBuildMetric` totals:** `built=67` (1 baseline + 3 `deferred:false` +
+63 `deferred:true`, up from 63/60 at the last review), `carry_forward=688`,
+`existing_queue=69`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time.
+
+**Two new rows since the last review:**
+
+| build_id | started_at | deferred | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual |
+|---|---|---|---:|---:|---:|---:|---:|
+| `d200050a-…` | 2026-10-05 17:03:16.972Z | **false** | 48,605 | 48,448 | 157 | — (`rounds: []`, `round_count: 0`) | n/a |
+| `cb45a8bc-…` | 2026-10-05 17:05:20.051Z | true | 28,359 | 26,629 | 1,730 | 791 | 939 — normal band |
+
+**The headline finding: `d200050a-…` is the THIRD `deferred: false` row
+this doc has ever recorded — directly answering next-step #3, which this
+doc has carried since 2026-09-28 ("a third would make this a real trend
+rather than two isolated incidents").** Checked its shape directly
+(`rounds`, `round_count`, `generate_call_count`): `rounds: []`,
+`round_count: 0`, `generate_call_count: 3` — **the same shape as the
+FIRST occurrence** (`4206ffb0-…`, 2026-09-26, also `rounds: []`,
+negligible `saved`), not the second (`9c0361e9-…`, 2026-09-27, four core
+rounds + 89.5s span). So the count is now 2 of one shape (`rounds: []`,
+fast, `after()` presumably just unavailable on an otherwise-normal build)
+and 1 of the other (four core rounds, abnormally long span) — a real trend
+in the first shape specifically, not evenly split across both. Negligible
+`saved` (157ms) on this row is consistent with the tail running inline
+rather than deferred, same read as the first occurrence. **Not tracing
+further this pass** (would need Vercel function logs this session doesn't
+have), but flagging plainly since this crosses the threshold the doc's own
+history explicitly set for when to stop calling it "isolated."
+
+`cb45a8bc-…` is not a new outlier (939ms residual, well under the
+15,000ms threshold).
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+`deferred:true` population:** still **20**, now of **63** (up from 62) —
+share eases slightly to 31.7% from 32.3%, within the established ~⅓ noise
+band.
+
+**3b population: median saving 15,546ms** (n=63, down from 16,704.5ms at
+n=60 — within the range this figure has moved before, not a new low).
+
+**Phase 3a (mechanism) holds** on `cb45a8bc-…` (`saved ≥` its own bonus
+`generationMs`); not applicable to `d200050a-…` (no bonus phase recorded to
+check against, same as both prior `deferred: false` rows).
+
+**No commits touch this doc's tracked mechanism since yesterday.** `git log
+--since=2026-10-05` on `queue-orchestrator.ts`, `src/server/db/queries/daily.ts`'s
+persist logic, and `build-context.ts` returns nothing.
+
+**No decision-resolving change.** Status stays `active`. The third
+`deferred: false` occurrence is a significant new data point this doc
+flagged in advance as worth escalating, but it doesn't resolve any of the
+five enumerated open decisions in §2 on its own — it's evidence toward the
+outlier-trace next step (now spanning three rows of one shape), not a
+question only Josh can answer yet. Question 4 (is the bonus worth its
+cost) remains open and unresolved.
+
+### Next steps (revised)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **six** reviews overdue.
+2. Trace the twenty outsized/elevated-residual builds — needs Vercel
+   function logs. All-time-high residual still `90da8604-…` (82.9s,
+   2026-09-27); `00bc82e4-…` (45.6s, 2026-10-01) still 4th.
+3. **Escalated:** a third `deferred: false` row has now landed
+   (`d200050a-…`, 2026-10-05), same shape as the first (`rounds: []`).
+   Worth a Vercel-log trace of why `after()` is unavailable on these three
+   builds specifically, now that it's a repeating pattern rather than a
+   one-off.
 4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 5. Question 4 (is the bonus worth its cost) — unresolved.
