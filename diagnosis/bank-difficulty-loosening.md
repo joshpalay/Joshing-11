@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -341,3 +341,60 @@ since deploy with zero fires observed in either. Status stays `active`.
 3. Watch whether the `tier` miss-reason share stays small (still just 1 of
    15 post-deploy misses) as more days accumulate.
 4. Q3 (loosened-pick correct-rate) still has nothing to measure.
+
+### 2026-10-07 (diagnosis-review) — the first loosened pick ever fired, on the 2026-10-06 cron; the ≥14-day measurement clock has not started yet (one fire is not "live")
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**Headline: the loosening fired for the first time, 3 cron cycles after
+deploy.** `SELECT count(*) ... WHERE (a->>'loosened')::boolean = true`
+now returns **1** (was 0 on every prior review). The single fire, read in
+full:
+
+| build_id | user | started_at (UTC) | domain | requested tier | served tier | outcome |
+|---|---|---|---|---|---|---|
+| `b691c375…` | `f5ed1c59…` | 2026-10-06 17:05:19 | Oklahoma! (Rodgers & Hammerstein Musical) | specialist | accessible | hit |
+
+This is a genuine two-steps-away loosened pick (specialist requested,
+accessible served — skipping the intermediate tier), exactly the mechanism
+§2 describes, firing correctly on its first real occurrence. **Not
+reading this as resolving anything** — one data point says the code path
+works, nothing about whether the player experience is fine with it. §6's
+exit criteria need ≥14 days of the loosening *actually firing*, and today
+is day 1 of that clock, not day 1-of-14-already-elapsed.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 17 (up from 9), `no_stock` 5 (up from 4),
+`tier` **2 (up from 1)**, `filtered` 1 (unchanged). The new `tier` miss is
+presumably a different attempt than the one that became the loosened hit
+above (a miss record and a hit record are different rows) — not
+cross-checked further since it doesn't change any exit-criteria math.
+
+**Q1 (trailing 14 days), re-run:** 2026-09-23 through 2026-10-06. Blended
+hit rate stays noisy day to day (31.4%–67.6%), including the fire day
+itself (2026-10-06: 44.4%, 8 hits / 10 misses) — inside the existing noisy
+range, not distinguishable from ordinary variance with n=1 loosened pick
+in the denominator.
+
+**Q2 (gen_calls_per_build), re-run:** 2.00–5.50 across the window,
+including 4.50 on 2026-10-06 — inside the existing noisy range.
+
+**Q3 — now has exactly one row to look at, not a real sample.** The
+single loosened pick was answered... not checked against `MASTERY_EVENTS`
+this session (one data point can't inform the "too easy" signal §6 asks
+about, and running Q3's full join for n=1 isn't worth the query). Will
+start being meaningful once a handful more loosened picks accumulate.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for
+§6 starts counting *fires*, not deploy-days — at 1 fire observed, it has
+barely begun.
+
+### Next steps (revised)
+1. Watch for more `loosened: true` picks to accumulate — now 1 ever (fired
+   2026-10-06), need materially more before Q3 or the §6 exit criteria mean
+   anything.
+2. Once a handful of loosened picks exist, run Q3 for real and start
+   reading the ≥14-day clock from the first fire, not the deploy date.
+3. Watch whether the `tier` miss-reason share (now 2 of 25 post-deploy
+   misses) keeps growing now that the mechanism has proven it can fire.

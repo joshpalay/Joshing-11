@@ -68,11 +68,11 @@ edit these standing decision documents.
 
 | File | Status | Opened | Last reviewed | Related PR |
 |---|---|---|---|---|
-| [answer-leak-domain-drift-plan.md](answer-leak-domain-drift-plan.md) | active | 2026-09-05 | 2026-10-06 | #1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717 |
-| [bank-difficulty-loosening.md](bank-difficulty-loosening.md) | active | 2026-10-03 | 2026-10-06 | #1743, #1744 |
-| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | active | 2026-09-04 | 2026-10-06 | #1620, #1626 |
-| [question-lifecycle-quality-plan.md](question-lifecycle-quality-plan.md) | active | 2026-09-09 | 2026-10-06 | #1646, #1698, #1702, #1709, #1720 |
-| [question-drift-r1-r2-tracking.md](question-drift-r1-r2-tracking.md) | active | 2026-09-11 | 2026-10-06 | #1654, #1662, #1666, #1683, #1698, #1742 |
+| [answer-leak-domain-drift-plan.md](answer-leak-domain-drift-plan.md) | active | 2026-09-05 | 2026-10-07 | #1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717 |
+| [bank-difficulty-loosening.md](bank-difficulty-loosening.md) | active | 2026-10-03 | 2026-10-07 | #1743, #1744 |
+| [daily-build-latency-deferral-plan.md](daily-build-latency-deferral-plan.md) | active | 2026-09-04 | 2026-10-07 | #1620, #1626 |
+| [question-lifecycle-quality-plan.md](question-lifecycle-quality-plan.md) | active | 2026-09-09 | 2026-10-07 | #1646, #1698, #1702, #1709, #1720 |
+| [question-drift-r1-r2-tracking.md](question-drift-r1-r2-tracking.md) | active | 2026-09-11 | 2026-10-07 | #1654, #1662, #1666, #1683, #1698, #1742 |
 
 Keep this table in sync by hand when you add/close a file, or let
 `/diagnosis-review` do it — it rewrites this table from each file's

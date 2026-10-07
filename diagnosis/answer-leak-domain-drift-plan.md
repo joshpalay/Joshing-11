@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3018,5 +3018,80 @@ recommended-but-unrun blind-labeling pass, now at 78 of 593.
 3. A blind-labeling pass on `answer_leak_any_token` remains due (now 78 of
    593) — recommended since 2026-09-25, still not run.
 4. The six open `ContentReport` rows remain unaddressed, now 30 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-07 (diagnosis-review) — 30 clean days on `answer_leak_partial`; everything else incremental, no decision-resolving change
+
+**Environment note:** fresh container this session — `node_modules` absent
+at start, `npm install` ran clean (807 packages). No `.env`/`.env.local`
+present (only `.env.example`'s placeholders), so `npm run
+check:category-integrity` still can't run directly (`DATABASE_URL`
+absent). Live, read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available. Reproduced the audit's five queries by
+hand via Supabase MCP and fed the exact rows through the real
+`analyzeCategoryIntegrity` function via a throwaway `tsx` script (not
+committed), rather than approximating with ad-hoc SQL grouping. **Verdict:
+`ok`** — zero hard failures (`nodeKeyMismatches: 0`, `orphanEdges: 0`,
+`hasCycle: false`, `graphSourceMerges: 0`). Soft findings unchanged in
+shape from every prior reading: the same 4 `splitKeys` (Classic Childrens'
+Television apostrophe variant, Greek Mythology/mythology, Human Anatomy &
+Physiology/and Physiology, Spy School series/Series) and the same 3
+Rent/Renaissance-Counterpoint `bankKeyMismatches`.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 795 | 0 | 0 |
+| `domain_drift` | 795 | 1 | 0 |
+| `answer_leak_single_word` | 692 | 2 | 0 |
+| `answer_leak_any_token` | 609 | **82** | 0 |
+| `answer_shape` | 795 | 2 | 0 |
+| `quality` | 795 | 310 | 231 (unchanged since 2026-10-03) |
+
+`answer_leak_partial` now at **30 consecutive clean days**, 795 considered
+(up from 779) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 779→795 considered) — the 2026-10-01 hit's Vercel log
+still hasn't been pulled by anyone. `answer_leak_single_word` gained 16
+considered (676→692), no new drop. `answer_leak_any_token` gained 4 more
+drops (78→82, 593→609 considered) — the recommended blind-labeling pass
+(open decision 6) remains unrun, now further past the ~13-hit threshold
+than ever (recommended since 2026-09-25, 12 days ago). `quality`'s
+`failed_open` stays flat at 231 — no further recurrence of the
+2026-10-02 `daily_build`-scope event.
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+id, all still `status='open'`:** `139e1932…` (`2327a4a1…`), `800c44a3…`
+(`8a776f5f…`), `357618e3…` (`8254bf9a…`) — the first three — plus
+`b1804847…` (`c77a8c53…`), `3c3f9989…` (`8887c3dc…`), `815b3ad8…`
+(`458795ac…`) — the 2026-09-06-evening three — now **31 days** since
+filing.
+
+**No new code touching this doc's tracked paths.** The only commit on
+`main` since the last review's commit is `#1755` ("retire the Save /
+Add-to-bank button everywhere") — diffed directly against
+`self-answering.ts`, `off-domain-second-opinion.ts`,
+`generate-questions.ts`, `sweep-bank-quality.ts`, `rewrite-bank-demotions.ts`,
+`daily.ts`, and `build-context.ts`: zero changes to any of them (it's a
+UI-only removal of the Save button and `AddToBankAction`).
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment (no `.env` file present at all, only `.env.example`'s
+empty placeholder). Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 82 of 609.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 30+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 82 of
+   609) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 31 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
