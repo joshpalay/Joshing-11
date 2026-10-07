@@ -125,10 +125,10 @@ beforeEach(() => {
   mocks.getRecentlyServedDomainKeys.mockResolvedValue(new Set<string>());
 });
 
-describe('fillDailyQueueForUser — Blue Moon throttles house picks across days', () => {
+describe('fillDailyQueueForUser — Blue Moon throttles friend + house picks across days', () => {
   // Chiann, 2026-10-07: Hamlet set to Blue Moon, yet a house Hamlet question
   // led her Daily Five every day for a week.
-  it('withholds a Blue Moon domain from the house picker if served in the last week', async () => {
+  it('withholds a Blue Moon domain from the friend + house pickers if served in the last week', async () => {
     mocks.getKnowledgeBase.mockResolvedValue([{ domain: 'Hamlet' }, { domain: 'Opera' }, { domain: 'Jazz' }]);
     mocks.getDailyPreferences.mockResolvedValue({
       difficulty: 'adaptive',
@@ -145,12 +145,15 @@ describe('fillDailyQueueForUser — Blue Moon throttles house picks across days'
 
     await fillDailyQueueForUser(USER);
 
-    const houseAllowed = mocks.pickHouseQuestions.mock.calls[0].find(
-      (arg): arg is ReadonlySet<string> => arg instanceof Set,
-    )!;
-    expect(houseAllowed.has('Hamlet')).toBe(false);
-    expect(houseAllowed.has('Opera')).toBe(true); // Blue Moon but not seen this week
-    expect(houseAllowed.has('Jazz')).toBe(true); // seen, but not Blue Moon
+    // Blue Moon takes priority over friend questions too (Josh, 2026-10-07).
+    for (const picker of [mocks.pickEligibleAuthoredQuestions, mocks.pickHouseQuestions]) {
+      const allowed = picker.mock.calls[0].find(
+        (arg): arg is ReadonlySet<string> => arg instanceof Set,
+      )!;
+      expect(allowed.has('Hamlet')).toBe(false);
+      expect(allowed.has('Opera')).toBe(true); // Blue Moon but not seen this week
+      expect(allowed.has('Jazz')).toBe(true); // seen, but not Blue Moon
+    }
   });
 });
 

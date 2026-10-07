@@ -627,9 +627,27 @@ async function buildDailyQueueForUser(
   const notHiddenCanonical = <T extends { id: string }>(pick: T): boolean =>
     !hiddenIds.questionIds.has(pick.id);
 
+  // Blue Moon applies ACROSS days for authored and house picks: a Blue Moon
+  // domain served in the last 7 days (any source) is withheld from both
+  // pickers, matching the generator's 1-per-week Blue Moon cap. Without this,
+  // friend/house stock surfaced a Blue Moon domain every day — the diversity
+  // cap only limits it to 1 PER DAY (Chiann's Hamlet, 7 of 7 days, 2026-10-07).
+  // Blue Moon takes priority over friend questions (Josh, 2026-10-07). A
+  // withheld friend question isn't lost: the authored picker only skips
+  // questions already served, so it surfaces once the week is up.
+  // Fail-open: a lookup error just skips the throttle for this build.
+  const recentlyServedKeys = await getRecentlyServedDomainKeys(userId, 7).catch(
+    () => new Set<string>(),
+  );
+  const pickerAllowedSubcategories = dropBlueMoonServedRecently(
+    allowedSubcategories,
+    preferences.domainPreferenceFrequency ?? {},
+    recentlyServedKeys,
+  );
+
   const socialGraph = await getFriendAndFoFUserIds(userId);
   const authoredAll = (
-    await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE, allowedSubcategories)
+    await pickEligibleAuthoredQuestions(userId, socialGraph, DAILY_QUEUE_SIZE, pickerAllowedSubcategories)
   ).filter(notHiddenCanonical);
   // Cap authored picks first (highest trust → first claim on each subcategory's
   // slots); deflected picks go to a reserve the backfill can draw on if the cap
@@ -679,22 +697,8 @@ async function buildDailyQueueForUser(
   // Request against the CAPPED authored count so house can fill any slot the cap
   // freed, then run house through the same shared diversity gate.
   // Hidden house picks are dropped outright, same absolute rule as authored above.
-  //
-  // Blue Moon applies across days for house too: a Blue Moon domain served in
-  // the last 7 days (any source) is withheld from the house picker, matching the
-  // generator's 1-per-week Blue Moon cap. Without this, house stock surfaced a
-  // Blue Moon domain every day — the diversity cap only limits it to 1 PER DAY.
-  // Fail-open: a lookup error just skips the throttle for this build.
-  const recentlyServedKeys = await getRecentlyServedDomainKeys(userId, 7).catch(
-    () => new Set<string>(),
-  );
-  const houseAllowedSubcategories = dropBlueMoonServedRecently(
-    allowedSubcategories,
-    preferences.domainPreferenceFrequency ?? {},
-    recentlyServedKeys,
-  );
   const housePicksAll = (
-    await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, houseAllowedSubcategories)
+    await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, pickerAllowedSubcategories)
   ).filter(notHiddenCanonical);
   const houseReserve: typeof housePicksAll = [];
   let houseAdmitted = 0;

@@ -65,12 +65,12 @@ export function dropCappedDomains(
 
 /**
  * Drop Blue Moon domains the player was already served recently from the set
- * the house picker may draw on. The generator enforces Blue Moon through its
- * weekly cap (1 per trailing 7 days), but house questions bypass the generator
- * and were only bounded by the 1-per-day diversity cap — so a Blue Moon domain
- * with house stock surfaced EVERY day (Chiann's Hamlet, 2026-10-07). No
- * starvation fallback is needed: dropping a house domain just hands its slot to
- * the generator. `recentlyServedKeys` is keyed by domainKey()
+ * the authored + house pickers may draw on. The generator enforces Blue Moon
+ * through its weekly cap (1 per trailing 7 days), but friend and house
+ * questions bypass the generator and were only bounded by the 1-per-day
+ * diversity cap — so a Blue Moon domain with stock surfaced EVERY day (Chiann's
+ * Hamlet, 2026-10-07). No starvation fallback is needed: dropping a domain here
+ * just hands its slot to the generator. `recentlyServedKeys` is keyed by domainKey()
  * (getRecentlyServedDomainKeys). Pure so it's unit-testable.
  */
 export function dropBlueMoonServedRecently(
