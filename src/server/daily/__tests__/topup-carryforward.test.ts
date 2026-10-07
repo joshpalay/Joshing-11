@@ -36,6 +36,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   pickHouseQuestions: vi.fn(),
   getRecentAnsweredAnswerKeys: vi.fn(),
   getRecentAnsweredEntities: vi.fn(),
+  getRecentlyServedDomainKeys: vi.fn(async () => new Set<string>()),
 }));
 
 vi.mock('@/server/daily/generate-questions', () => ({

@@ -19,8 +19,10 @@ import {
   pickHouseQuestions,
   getRecentAnsweredAnswerKeys,
   getRecentAnsweredEntities,
+  getRecentlyServedDomainKeys,
   type BonusPresence,
 } from '@/server/db/queries/daily';
+import { dropBlueMoonServedRecently } from '@/server/daily/domain-selection';
 import { ANSWER_COOLDOWN_DAYS, makeAnswerCooldownGate } from '@/server/daily/answer-cooldown';
 import { getCoreSlots } from '@/server/daily/bonus';
 import {
@@ -677,8 +679,22 @@ async function buildDailyQueueForUser(
   // Request against the CAPPED authored count so house can fill any slot the cap
   // freed, then run house through the same shared diversity gate.
   // Hidden house picks are dropped outright, same absolute rule as authored above.
+  //
+  // Blue Moon applies across days for house too: a Blue Moon domain served in
+  // the last 7 days (any source) is withheld from the house picker, matching the
+  // generator's 1-per-week Blue Moon cap. Without this, house stock surfaced a
+  // Blue Moon domain every day — the diversity cap only limits it to 1 PER DAY.
+  // Fail-open: a lookup error just skips the throttle for this build.
+  const recentlyServedKeys = await getRecentlyServedDomainKeys(userId, 7).catch(
+    () => new Set<string>(),
+  );
+  const houseAllowedSubcategories = dropBlueMoonServedRecently(
+    allowedSubcategories,
+    preferences.domainPreferenceFrequency ?? {},
+    recentlyServedKeys,
+  );
   const housePicksAll = (
-    await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, allowedSubcategories)
+    await pickHouseQuestions(userId, DAILY_QUEUE_SIZE - authored.length, houseAllowedSubcategories)
   ).filter(notHiddenCanonical);
   const houseReserve: typeof housePicksAll = [];
   let houseAdmitted = 0;

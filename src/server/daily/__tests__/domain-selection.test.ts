@@ -4,6 +4,7 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 import {
   domainFrequencyWeight,
   domainWeeklyCap,
+  dropBlueMoonServedRecently,
   dropCappedDomains,
   selectCustomDomainsForRound,
   selectDryDomainsForRetry,
@@ -234,5 +235,27 @@ describe('domainWeeklyCap', () => {
     expect(domainWeeklyCap('resting')).toBe(0);
     expect(domainWeeklyCap(undefined)).toBe(5);
     expect(domainWeeklyCap('garbage')).toBe(5);
+  });
+});
+
+describe('dropBlueMoonServedRecently', () => {
+  const keys = (...labels: string[]) => new Set(labels.map(domainKey));
+
+  it('drops only Blue Moon domains that were served recently', () => {
+    const result = dropBlueMoonServedRecently(
+      new Set(['Hamlet', 'Beethoven', 'Jazz']),
+      { Hamlet: 'blue_moon', Beethoven: 'blue_moon', Jazz: 'often' },
+      keys('Hamlet', 'Jazz'),
+    );
+    expect([...result].sort()).toEqual(['Beethoven', 'Jazz']);
+  });
+
+  it('matches spelling variants via domainKey', () => {
+    const result = dropBlueMoonServedRecently(
+      new Set(["1990's Cartoons"]),
+      { '1990’s cartoons': 'blue_moon' },
+      keys("1990's Cartoons"),
+    );
+    expect(result.size).toBe(0);
   });
 });

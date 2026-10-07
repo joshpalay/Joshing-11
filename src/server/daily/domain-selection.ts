@@ -63,6 +63,34 @@ export function dropCappedDomains(
   return domains.filter((domain) => !cappedKeys.has(domainKey(domain)));
 }
 
+/**
+ * Drop Blue Moon domains the player was already served recently from the set
+ * the house picker may draw on. The generator enforces Blue Moon through its
+ * weekly cap (1 per trailing 7 days), but house questions bypass the generator
+ * and were only bounded by the 1-per-day diversity cap — so a Blue Moon domain
+ * with house stock surfaced EVERY day (Chiann's Hamlet, 2026-10-07). No
+ * starvation fallback is needed: dropping a house domain just hands its slot to
+ * the generator. `recentlyServedKeys` is keyed by domainKey()
+ * (getRecentlyServedDomainKeys). Pure so it's unit-testable.
+ */
+export function dropBlueMoonServedRecently(
+  allowed: ReadonlySet<string>,
+  frequencyByDomain: Record<string, string>,
+  recentlyServedKeys: ReadonlySet<string>,
+): Set<string> {
+  const blueMoonKeys = new Set(
+    Object.entries(frequencyByDomain)
+      .filter(([, frequency]) => frequency === 'blue_moon')
+      .map(([domain]) => domainKey(domain)),
+  );
+  return new Set(
+    [...allowed].filter((domain) => {
+      const key = domainKey(domain);
+      return !(blueMoonKeys.has(key) && recentlyServedKeys.has(key));
+    }),
+  );
+}
+
 export function domainWeeklyCap(frequency: string | undefined): number {
   // Same explicit `in` check as domainFrequencyWeight: 'resting' maps to a real 0.
   if (frequency !== undefined && frequency in DOMAIN_WEEKLY_CAP_BY_FREQUENCY) {

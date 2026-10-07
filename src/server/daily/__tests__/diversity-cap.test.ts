@@ -41,6 +41,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   pickHouseQuestions: mocks.pickHouseQuestions,
   getRecentAnsweredAnswerKeys: mocks.getRecentAnsweredAnswerKeys,
   getRecentAnsweredEntities: mocks.getRecentAnsweredEntities,
+  getRecentlyServedDomainKeys: vi.fn(async () => new Set<string>()),
   persistDailyQueue: mocks.persistDailyQueue,
   buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
