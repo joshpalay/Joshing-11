@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   generateDailyQuestionsFromKnowledgeBase: vi.fn(),
   generateBonusQuestionsForDomains: vi.fn(),
   isGenericSubcategory: vi.fn(),
+  getRecentlyServedDomainKeys: vi.fn(),
 }));
 
 // Pure slot builders are unmocked-in-spirit: the orchestrator assembles the
@@ -42,6 +43,7 @@ vi.mock('@/server/db/queries/daily', () => ({
   pickHouseQuestions: mocks.pickHouseQuestions,
   getRecentAnsweredAnswerKeys: vi.fn(async () => new Set<string>()),
   getRecentAnsweredEntities: vi.fn(async () => new Set<string>()),
+  getRecentlyServedDomainKeys: mocks.getRecentlyServedDomainKeys,
   persistDailyQueue: mocks.persistDailyQueue,
   buildAuthoredSlot: (a: { id: string; canonicalSubcategory: string; questionText: string }, position: number) => ({
     slot_index: position, source: 'friend', question_id: a.id, domain: a.canonicalSubcategory, question_text: a.questionText, answered: false,
@@ -120,6 +122,39 @@ beforeEach(() => {
   );
 
   mocks.persistDailyQueue.mockResolvedValue({ row: { id: 'mock-queue-id' } as never, won: true });
+  mocks.getRecentlyServedDomainKeys.mockResolvedValue(new Set<string>());
+});
+
+describe('fillDailyQueueForUser — Blue Moon throttles friend + house picks across days', () => {
+  // Chiann, 2026-10-07: Hamlet set to Blue Moon, yet a house Hamlet question
+  // led her Daily Five every day for a week.
+  it('withholds a Blue Moon domain from the friend + house pickers if served in the last week', async () => {
+    mocks.getKnowledgeBase.mockResolvedValue([{ domain: 'Hamlet' }, { domain: 'Opera' }, { domain: 'Jazz' }]);
+    mocks.getDailyPreferences.mockResolvedValue({
+      difficulty: 'adaptive',
+      domainMode: 'random',
+      selectedDomains: [],
+      domainPreferenceFrequency: { Hamlet: 'blue_moon', Opera: 'blue_moon' },
+    });
+    // Hamlet (Blue Moon) and Jazz (unset) were both served recently; Opera wasn't.
+    mocks.getRecentlyServedDomainKeys.mockResolvedValue(new Set(['hamlet', 'jazz']));
+    // Distinct subcategories so the per-day caps don't leave the build short.
+    mocks.generateDailyQuestionsFromKnowledgeBase.mockResolvedValue(
+      Array.from({ length: DAILY_QUEUE_SIZE }, (_, i) => genq(`q${i}`, `Area ${i}`)),
+    );
+
+    await fillDailyQueueForUser(USER);
+
+    // Blue Moon takes priority over friend questions too (Josh, 2026-10-07).
+    for (const picker of [mocks.pickEligibleAuthoredQuestions, mocks.pickHouseQuestions]) {
+      const allowed = picker.mock.calls[0].find(
+        (arg): arg is ReadonlySet<string> => arg instanceof Set,
+      )!;
+      expect(allowed.has('Hamlet')).toBe(false);
+      expect(allowed.has('Opera')).toBe(true); // Blue Moon but not seen this week
+      expect(allowed.has('Jazz')).toBe(true); // seen, but not Blue Moon
+    }
+  });
 });
 
 describe('fillDailyQueueForUser — Game settings categories drive selection', () => {

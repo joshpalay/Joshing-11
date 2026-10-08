@@ -2444,6 +2444,30 @@ export async function getRecentDomainCounts(
   return result;
 }
 
+// Domains the player was actually SERVED (any slot source: house, friend, bot)
+// in Daily Fives created within the lookback window, keyed by domainKey().
+// getRecentDomainCounts above only sees GENERATED rows, so a house or authored
+// slot is invisible to it — which is how a Blue Moon "Hamlet" house question
+// was served every day for a week (Chiann, 2026-10-07). Callers must look up
+// with domainKey(domain) to match.
+export async function getRecentlyServedDomainKeys(
+  userId: string,
+  lookbackDays = 7,
+): Promise<Set<string>> {
+  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ slots: dailyQueues.slots })
+    .from(dailyQueues)
+    .where(and(eq(dailyQueues.userId, userId), gte(dailyQueues.createdAt, since)));
+  const result = new Set<string>();
+  for (const row of rows) {
+    for (const slot of asQueueSlots(row.slots)) {
+      if (slot.domain) result.add(domainKey(slot.domain));
+    }
+  }
+  return result;
+}
+
 // Recently-answered CANONICAL question texts for a user (BP-6 / audit Q8).
 // Embedding-based per-user history dedup (B-DEDUP-SEMANTIC-01). The exact-
 // question_id "already seen" filters above (pickEligibleAuthoredQuestions /
