@@ -16,8 +16,8 @@ const base = (model: string, extra: Record<string, unknown> = {}) =>
 const rec = (p: Params) => mod.sanitizeParamsForModel(p) as unknown as Record<string, unknown>;
 
 describe('modelRejectsSamplingParams', () => {
-  it('is true for the Sonnet-5 / Opus-4.7+ / Fable line', () => {
-    for (const m of ['claude-sonnet-5', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-fable-5', 'claude-mythos-5']) {
+  it('is true for the Sonnet-5 / Haiku-5.5 / Opus-4.7+ / Fable line', () => {
+    for (const m of ['claude-sonnet-5', 'claude-haiku-5-5', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-fable-5', 'claude-mythos-5']) {
       expect(mod.modelRejectsSamplingParams(m)).toBe(true);
     }
   });
@@ -29,8 +29,9 @@ describe('modelRejectsSamplingParams', () => {
 });
 
 describe('modelDefaultsThinkingOn', () => {
-  it('is true only for Sonnet 5 / Mythos 5', () => {
+  it('is true for Sonnet 5, Haiku 5.5, and Mythos 5', () => {
     expect(mod.modelDefaultsThinkingOn('claude-sonnet-5')).toBe(true);
+    expect(mod.modelDefaultsThinkingOn('claude-haiku-5-5')).toBe(true);
     expect(mod.modelDefaultsThinkingOn('claude-mythos-5')).toBe(true);
     expect(mod.modelDefaultsThinkingOn('claude-sonnet-4-6')).toBe(false);
     expect(mod.modelDefaultsThinkingOn('claude-opus-4-8')).toBe(false); // Opus 4.8 defaults thinking OFF
@@ -74,6 +75,23 @@ describe('sanitizeParamsForModel', () => {
   it('leaves Haiku params untouched', () => {
     const p = base('claude-haiku-4-5-20251001', { temperature: 0 });
     expect(mod.sanitizeParamsForModel(p)).toBe(p);
+  });
+
+  it('strips incompatible sampling params for Haiku 5.5', () => {
+    const out = rec(base('claude-haiku-5-5', { temperature: 0, top_p: 1, top_k: 10 }));
+    expect(out.temperature).toBeUndefined();
+    expect(out.top_p).toBeUndefined();
+    expect(out.top_k).toBeUndefined();
+    expect(out.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('keeps explicitly requested adaptive thinking for a Haiku 5.5 trial', () => {
+    const out = rec(base('claude-haiku-5-5', {
+      temperature: 0.8, thinking: { type: 'adaptive' }, output_config: { effort: 'low' },
+    }));
+    expect(out.temperature).toBeUndefined();
+    expect(out.thinking).toEqual({ type: 'adaptive' });
+    expect(out.output_config).toEqual({ effort: 'low' });
   });
 
   it('strips temperature/top_p/top_k for Sonnet 5 and defaults thinking off', () => {

@@ -1,6 +1,6 @@
 /**
  * Read-only Cassian pilot estimate. No database or model calls.
- * Run: npx tsx scripts/cassian-estimate.ts
+ * Run: npx tsx scripts/cassian-estimate.ts --topics 6 --reuse-sources
  * The observed token averages are frozen in Cassian/BASELINE.md. Refresh them
  * deliberately before paid dispatch; they are estimates, not a billing limit.
  */
@@ -21,6 +21,7 @@ type Manifest = {
 const manifest = JSON.parse(readFileSync(resolve(process.env.CASSIAN_MANIFEST_FILE || 'Cassian/manifest.json'), 'utf8')) as Manifest;
 const argIndex = process.argv.indexOf('--topics');
 const selectedTopics = argIndex < 0 ? 12 : Number(process.argv[argIndex + 1]);
+const reuseSources = process.argv.includes('--reuse-sources');
 if (![3, 6, 9, 12].includes(selectedTopics)) throw new Error('--topics must be 3, 6, 9, or 12 (balanced blocks).');
 const counts = new Map<string, number>();
 for (const topic of manifest.topics) counts.set(topic.breadth, (counts.get(topic.breadth) ?? 0) + 1);
@@ -56,9 +57,10 @@ const baselineGeneration = {
 };
 // Same prompt length, with no assumed Haiku cache benefit. This is an estimate
 // until its actual usage is observed; output is provisionally held equal.
+const candidateTokenizerFactor = candidate === 'claude-haiku-5-5' ? 1.3 : 1;
 const candidateGeneration = {
-  inputTokens: baselineGeneration.inputTokens + baselineGeneration.cacheReadTokens + baselineGeneration.cacheCreateTokens,
-  outputTokens: baselineGeneration.outputTokens,
+  inputTokens: Math.ceil((baselineGeneration.inputTokens + baselineGeneration.cacheReadTokens + baselineGeneration.cacheCreateTokens) * candidateTokenizerFactor),
+  outputTokens: Math.ceil(baselineGeneration.outputTokens * candidateTokenizerFactor),
   cacheReadTokens: 0, cacheCreateTokens: 0,
 };
 const qualityUsage = {
@@ -70,7 +72,7 @@ const factualUsage = {
 
 const totalTopics = selectedTopics;
 const questionsPerArm = totalTopics * manifest.requestedPerTopicPerArm;
-const source = priced(SOURCE_MODEL, sourceUsage) * totalTopics;
+const source = reuseSources ? 0 : priced(SOURCE_MODEL, sourceUsage) * totalTopics;
 const writerA = priced(baseline, baselineGeneration) * questionsPerArm;
 const writerB = priced(candidate, candidateGeneration) * questionsPerArm;
 const gates = (
@@ -84,6 +86,7 @@ console.log(JSON.stringify({
   manifestId: manifest.id,
   gateModels: { quality: QUALITY_GATE_MODEL, factual: FACTUAL_GATE_MODEL },
   topics: totalTopics,
+  sourceMode: reuseSources ? 'saved reference packets; zero new retrieval calls' : 'new retrieval',
   requestedQuestions: questionsPerArm * 2,
   priceSource: 'repository pricing catalog; independently confirm provider bill before paid dispatch',
   usageSource: '14-day LlmUsageEvent averages frozen 2026-10-03',

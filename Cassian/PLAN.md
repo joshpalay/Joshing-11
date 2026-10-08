@@ -2,6 +2,8 @@
 
 Version 1, 2026-10-03. This is the current plan; the older QEXP-01 plan is background only.
 
+Update 2026-10-08: the original Sonnet 5.5 versus Haiku 4.5 comparison and a newer [Sonnet 5.5 versus Haiku 5.5 trial](HAIKU-55.md) are complete. The model IDs and proposed first comparator below describe the initial design; follow [NEXT-STEPS.md](NEXT-STEPS.md) for current actions.
+
 ## 1. Goal, scope and limits
 
 Find whether a cheaper question writer can reduce total accepted-question cost and topic-selection-to-ready time without sacrificing quality, difficulty fit, narrow-topic coverage or novelty for the recipient. Desired ongoing game spend is $5/month; feasibility is unknown. The initial experiment has $10 total incremental spend authorized, including retrieval, gates, answer grading, retries and failures.
