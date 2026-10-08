@@ -173,13 +173,32 @@ export async function harvestVerifyBatches(
       await markVerifyBatchRunHarvested(run.id, now);
       summary.runsHarvested += 1;
     } catch (error) {
-      // Leave the run 'submitted' — retried on the next cron pass (and given up
-      // via the stale cutoff if it never recovers).
-      summary.runsStillProcessing += 1;
       console.warn('[verify-batch] harvest failed for run', {
         providerBatchId: run.providerBatchId,
         error: error instanceof Error ? error.message : String(error),
       });
+      // A 404 is permanent (results past their 29-day life, or the batch was
+      // submitted under a different API key/workspace) and a run older than the
+      // stale cutoff is never coming back. Either way, give up — otherwise this
+      // one run counts as "still processing" forever and blocks every new
+      // submission. That is exactly what froze verification from 2026-08-27 to
+      // 2026-10-08: a key rotation made one ended batch 404 on every pass, and
+      // this catch skipped the stale cutoff. Its rows are unstamped and get
+      // re-picked by the next submit.
+      const permanent =
+        (error as { status?: number } | null)?.status === 404 ||
+        now.getTime() - run.createdAt.getTime() > STALE_RUN_MS;
+      if (permanent) {
+        try {
+          await markVerifyBatchRunFailed(run.id, now);
+          summary.runsFailed += 1;
+          console.warn('[verify-batch] unreachable run marked failed', { providerBatchId: run.providerBatchId });
+          continue;
+        } catch {
+          // Couldn't record the give-up — fall through and retry next pass.
+        }
+      }
+      summary.runsStillProcessing += 1;
     }
   }
 
