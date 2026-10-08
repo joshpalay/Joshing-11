@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -398,3 +398,45 @@ barely begun.
    reading the ≥14-day clock from the first fire, not the deploy date.
 3. Watch whether the `tier` miss-reason share (now 2 of 25 post-deploy
    misses) keeps growing now that the mechanism has proven it can fire.
+
+### 2026-10-08 (diagnosis-review) — still only one loosened pick ever, two cron cycles after the first fire; nothing new to read
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session.
+
+**The loosening has fired exactly once, all time, still.**
+`SELECT count(*) ... WHERE (a->>'loosened')::boolean = true` returns **1**
+— the same single fire from 2026-10-06 (`b691c375…`) this doc's last entry
+found; no second fire in the two cron cycles since (2026-10-07,
+2026-10-08's cron hasn't run yet at review time).
+
+**Q1 (trailing 14 days), re-run:** 2026-09-24 through 2026-10-07. Blended
+hit rate stays noisy day to day (26.7%–66.7% depending on the day), with
+2026-10-07 at 44.1% (15 hits / 19 misses) — inside the existing noisy
+range, same read as every prior entry.
+
+**Q2 (gen_calls_per_build), re-run:** 2.00–5.50 across the window,
+including 4.67 on 2026-10-07 — inside the existing noisy range, no visible
+shift.
+
+**Q3 still has exactly one row to look at** — unchanged since the last
+review, not worth running the full join again for n=1.
+
+**No code change since the last review** to `generate-questions.ts` or
+`build-context.ts` (the only new commit on `main`, `#1756`, touches
+`queue-orchestrator.ts` and `daily.ts` for an unrelated Blue Moon
+cross-day throttle on the authored/house pickers — confirmed by reading
+its diff, no overlap with `bankLooseTiers` / `bankLooseTierMaxPerBuild` /
+`pickBankPicksForDomains`).
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for
+§6 still hasn't meaningfully started — one fire, two cron cycles ago, is
+not "live."
+
+### Next steps (unchanged)
+1. Watch for a second `loosened: true` pick — still just 1 ever (fired
+   2026-10-06), now two cron cycles with no second fire.
+2. Once a handful of loosened picks exist, run Q3 for real and start
+   reading the ≥14-day clock from the first fire, not the deploy date.
+3. Watch whether the `tier` miss-reason share keeps growing now that the
+   mechanism has proven it can fire.

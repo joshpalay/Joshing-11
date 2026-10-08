@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -2526,5 +2526,86 @@ unresolved.
 3. The three `deferred: false` rows (two of shape A, one of shape B) still
    need a Vercel-log trace of why `after()` was unavailable on those
    builds specifically — no new occurrence since 2026-10-05.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-08 (diagnosis-review) — a new outlier (41.4s residual); three new built rows from the 2026-10-07 cron plus an evening build; `verify:build-latency-anomaly` now eight reviews overdue; no code touches the persist mechanism
+
+**Environment note:** fresh container this session — `node_modules`
+absent at start. No `.env`/`.env.local` present, so `npm run
+check:build-latency` can't run directly — reproduced its exact queries
+(totals by outcome, `saved`/bonus-cost/residual via `jsonb_array_elements`
+over `rounds` filtered to `phase='bonus'`, same formula as
+`build-latency-check.mjs`) directly against the live DB via the Supabase
+MCP connection. `verify:build-latency-anomaly` stays unrun per this doc's
+own §7 convention (write-capable) — now overdue for an **eighth**
+consecutive review.
+
+**`DailyBuildMetric` totals:** `built=72` (1 baseline + 3 `deferred:false`
++ 68 `deferred:true`, up from 69/65 at the last review), `carry_forward=736`,
+`existing_queue=69`, `partial_carry_forward=5`. **`outcome='lost_persist_race'`
+is still 0 rows**, cumulative, all time (absent from the outcome totals
+entirely).
+
+**Three new rows since the last review, all `deferred=true`:**
+
+| build_id | started_at | span_ms | user_visible_ms | saved | bonus (`generationMs`) | residual | Phase 3a |
+|---|---|---:|---:|---:|---:|---:|---|
+| `b8642731-…` | 2026-10-07 17:05:20 | 91,811 | 74,765 | 17,046 | 15,813 | 1,233 — normal band | PASS |
+| `4d51ac28-…` | 2026-10-07 17:05:16 | 85,988 | 38,417 | 47,571 | 6,217 | **41,354** | PASS |
+| `460f396d-…` | 2026-10-07 21:08:35 | 41,831 | 34,631 | 7,200 | 6,510 | 690 — normal band | PASS |
+
+**The headline finding: `4d51ac28-…`'s residual (41,354ms / 41.4s) is a new
+outlier**, landing above the established ~⅓ noise band same as every prior
+large-residual row. Checked its shape directly: `round_count` carries only
+the one `bonus`-phase round (`generationMs: 6,217`); the 41.4s gap between
+`span_ms` and `user_visible_ms` beyond that bonus cost is unaccounted for
+by any logged round — same unexplained-residual pattern as every other
+large outlier this doc has been unable to trace without Vercel function
+logs. It ranks below the existing #1–#3 (`90da8604-…` 82.9s, `a1e79665-…`
+64.4s, `05589486-…` 60.6s) and below `00bc82e4-…` (45.6s) too — 41.4s
+slots in just beneath that one; not re-ranking the full list this pass
+since the exact ordering below #3 hasn't been the thing blocking any
+decision. Not tracing further (same tooling gap as every prior review).
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+`deferred:true` population via SQL (not approximated from `saved`
+alone):** now **22**, of **68** (up from 21 of 65) — share holds at
+**32.4%**, inside the established ~⅓ noise band.
+
+**3b population: median saving 15,627ms** (n=68, up from 15,546ms at
+n=65 — within the range this figure has moved before).
+
+**Phase 3a (mechanism) holds on all three new rows** (`saved ≥` each
+build's own bonus `generationMs`).
+
+**No third occurrence of anything new on the `deferred: false` front** —
+still exactly 3 rows, same as the last review (no new cron produced one).
+
+**No commits touch this doc's tracked mechanism since the last review.**
+The only new commit on `main`, `#1756` ("Blue Moon throttles friend +
+house picks across days"), touches `queue-orchestrator.ts` — read the diff
+directly: it adds a Blue Moon cross-day throttle applied to the
+authored/house pickers *before* `persistDailyQueue` is ever called, and
+does not touch `persistDailyQueue`, `appendDeferredBonusSlots`, the `won`
+check, or `build-context.ts`. Confirmed no overlap with this doc's tracked
+persist-race mechanism.
+
+**No decision-resolving change.** Status stays `active`. A new outlier is
+more evidence for the still-open "trace the outlier builds" next step, not
+a question only Josh can answer yet. Question 4 (is the bonus worth its
+cost) remains open and unresolved.
+
+### Next steps (unchanged, plus the new outlier)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **eight** reviews overdue.
+2. Trace the twenty-two outsized/elevated-residual builds — needs Vercel
+   function logs. Ranking unchanged at the top: `90da8604-…` (82.9s) #1;
+   `a1e79665-…` (64.4s) #2; `05589486-…` (60.6s) #3; a new row,
+   `4d51ac28-…` (41.4s, 2026-10-07), slots in just below `00bc82e4-…`
+   (45.6s).
+3. The three `deferred: false` rows still need a Vercel-log trace of why
+   `after()` was unavailable on those builds specifically — no new
+   occurrence since 2026-10-05.
 4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
 5. Question 4 (is the bonus worth its cost) — unresolved.
