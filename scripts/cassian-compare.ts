@@ -5,6 +5,8 @@
  *   npx tsx scripts/cassian-compare.ts --resume --topics 3
  * A run requires migration 0151 and DATABASE_URL + ANTHROPIC_API_KEY. The
  * private checkpoint is ignored under _scratch/Cassian/<manifest id>/.
+ * Set CASSIAN_SOURCE_CHECKPOINT_FILE to reuse frozen reference packets, and
+ * CASSIAN_PRIOR_STATE_FILE to provide the same prior-fact snapshot to both arms.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -39,6 +41,7 @@ type Checkpoint = {
   manifestSha: string; calls: Record<string, CallResult>;
   candidates: Record<string, { question: LlmQuestion | null; status: string; checks: Record<string, unknown> }>;
 };
+type PriorEntry = { text: string; factKey?: string | null };
 
 const manifestPath = resolve(process.env.CASSIAN_MANIFEST_FILE || 'Cassian/manifest.json');
 const manifestBytes = readFileSync(manifestPath);
@@ -159,12 +162,15 @@ function parseGate(raw: string): { drop: boolean; reason: string | null; valid: 
 
 async function run(): Promise<void> {
   const topics = balancedTopics(requestedTopics);
+  const savedSourcePath = process.env.CASSIAN_SOURCE_CHECKPOINT_FILE;
+  const priorStatePath = process.env.CASSIAN_PRIOR_STATE_FILE;
   if (!paidMode) {
     console.log(JSON.stringify({
       mode: 'estimate-only', manifestId: manifest.id, manifestSha,
       nextTopics: topics.map((topic) => ({ domain: topic.domain, breadth: topic.breadth })),
+      sourceMode: savedSourcePath ? 'saved checkpoint' : 'new retrieval',
       estimatedBy: 'npx tsx scripts/cassian-estimate.ts',
-        paidCommand: 'Set CASSIAN_MANIFEST_FILE to the private frozen manifest, then run: npx tsx scripts/cassian-compare.ts --run --topics 3',
+      paidCommand: 'Set CASSIAN_MANIFEST_FILE to the private frozen manifest, then run: npx tsx scripts/cassian-compare.ts --run --topics 3',
       paidCalls: 0,
     }, null, 2));
     return;
@@ -186,6 +192,17 @@ async function run(): Promise<void> {
   const { wrapUserInput } = llmApi;
   const client = llmApi.getAnthropicClient();
   if (!client) throw new Error('Anthropic client is unavailable; no paid dispatch.');
+  const savedSources = savedSourcePath
+    ? JSON.parse(readFileSync(resolve(savedSourcePath), 'utf8')) as Checkpoint : null;
+  const savedPrior = priorStatePath
+    ? JSON.parse(readFileSync(resolve(priorStatePath), 'utf8')) as { prior?: Record<string, PriorEntry[]> } : null;
+  if (savedSources) {
+    for (const topic of topics) {
+      if (!savedSources.calls[`source:${topic.domain}`]) {
+        throw new Error(`Saved source missing for ${topic.domain}; no paid dispatch.`);
+      }
+    }
+  }
   unlockRunner = await acquireRunnerLock();
   const checkpoint = load();
   const baseline = manifest.arms.find((arm) => arm.id === 'baseline');
@@ -198,7 +215,7 @@ async function run(): Promise<void> {
     const sourceKey = `source:${topic.domain}`;
     const hint = hints.get(domainKey(topic.domain));
     const pref = resolveReferenceSourcePreference(hint);
-    const sourceResult = await call(checkpoint, client, sourceKey, 2, {
+    const sourceResult = savedSources?.calls[sourceKey] ?? await call(checkpoint, client, sourceKey, 2, {
         model: SOURCE_MODEL, max_tokens: 1500,
       system: retrievalSystemPrompt(pref),
       messages: [{ role: 'user', content: buildRetrievalUserMessage(topic.domain, hint, pref) }],
@@ -210,14 +227,28 @@ async function run(): Promise<void> {
       ? { source: parsedSource.source, passage: parsedSource.passage } : null;
     for (const arm of [baseline, candidate]) {
       const candidateKey = `${topic.domain}:${arm.id}`;
+      // Freeze the same prior-fact context for both arms. Old Cassian cards and
+      // the bank/history snapshot from the earlier trial stay out of this run.
+      const oldCandidates = savedSources
+        ? Object.entries(savedSources.candidates)
+          .filter(([key, value]) => key.startsWith(`${topic.domain}:`) && value.question)
+          .map(([, value]) => ({ text: value.question!.question_text, factKey: value.question!.fact_key }))
+        : [];
+      const prior = [...(savedPrior?.prior?.[topic.domain] ?? []), ...oldCandidates];
+      const priorTexts = prior.filter((entry) => entry.text).map((entry) => ({ domain: topic.domain, text: entry.text }));
+      const priorFacts = prior.filter((entry) => entry.factKey).map((entry) => ({ domain: topic.domain, factKey: entry.factKey! }));
       const userPrompt = buildUserPrompt(
-        [topic.domain], 1, [], [], undefined, topic.difficulty,
+        [topic.domain], 1, priorTexts, priorFacts, undefined, topic.difficulty,
         undefined, undefined, undefined,
         new Map([[topic.domain, 'declared']]), undefined, null, undefined,
         reference ? new Map([[topic.domain, reference]]) : undefined,
       );
       const generation = await call(checkpoint, client, `writer:${candidateKey}`, 0.35, {
-        model: arm.model, max_tokens: 2000, temperature: 0.8,
+        model: arm.model, max_tokens: arm.model === 'claude-haiku-5-5' ? 3000 : 2000,
+        temperature: 0.8,
+        ...(arm.model === 'claude-haiku-5-5' ? {
+          output_config: { effort: 'low' as const }, thinking: { type: 'adaptive' as const },
+        } : {}),
         system: [{ type: 'text', text: SYSTEM_PROMPT,
           cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: userPrompt }],

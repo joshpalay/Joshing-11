@@ -11,6 +11,11 @@ const manifest = JSON.parse(bytes.toString('utf8')) as {
   id: string; topics: { domain: string; breadth: string }[];
 };
 const manifestSha = createHash('sha256').update(bytes).digest('hex');
+const topicArg = process.argv.indexOf('--topics');
+const expectedTopics = topicArg < 0 ? manifest.topics.length : Number(process.argv[topicArg + 1]);
+if (![3, 6, 9, 12].includes(expectedTopics)) {
+  throw new Error('--topics must be a balanced block of 3, 6, 9, or 12.');
+}
 const checkpoint = JSON.parse(readFileSync(
   resolve('_scratch/Cassian', manifest.id, 'checkpoint.json'), 'utf8',
 )) as {
@@ -52,7 +57,17 @@ const rows = Object.entries(checkpoint.candidates).map(([key, snapshot]) => {
   return { id, snapshotSha, ...immutable };
 });
 
-if (rows.length !== manifest.topics.length * 2 || new Set(rows.map((row) => row.id)).size !== rows.length) {
+const breadthCounts = new Map<string, number>();
+for (const domain of new Set(rows.map((row) => row.domain))) {
+  const breadth = manifest.topics.find((topic) => topic.domain === domain)?.breadth;
+  if (!breadth) throw new Error(`Unknown topic ${domain}.`);
+  breadthCounts.set(breadth, (breadthCounts.get(breadth) ?? 0) + 1);
+}
+if (rows.length !== expectedTopics * 2 || new Set(rows.map((row) => row.id)).size !== rows.length ||
+  ['broad', 'niche', 'very narrow'].some((breadth) => breadthCounts.get(breadth) !== expectedTopics / 3) ||
+  new Set(rows.map((row) => row.domain)).size !== expectedTopics ||
+  [...new Set(rows.map((row) => row.domain))].some((domain) =>
+    rows.filter((row) => row.domain === domain).map((row) => row.arm).sort().join(',') !== 'baseline,candidate')) {
   throw new Error('Import requires one unique parsed candidate per topic and arm.');
 }
 if (!process.argv.includes('--apply')) {

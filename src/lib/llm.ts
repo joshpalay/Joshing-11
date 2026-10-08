@@ -84,19 +84,20 @@ export type AnswerSuggestionResult = {
 // without touching the ~15 call sites that pass temperature.
 export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6';
 
-// Models in the Opus-4.7+ / Sonnet-5 / Fable line REJECT temperature/top_p/top_k
+// Models in the Opus-4.7+ / Sonnet-5 / Haiku-5.5 / Fable line reject the
+// sampling values used by our structured-output callers.
 // (HTTP 400). Callers may keep passing temperature; loggedMessagesCreate strips it
 // for these models. Exported for the param-sanitizer test.
 export function modelRejectsSamplingParams(model: string): boolean {
-  return /opus-4-[78]|sonnet-5|fable|mythos/.test(model);
+  return /opus-4-[78]|sonnet-5|haiku-5-5|fable|mythos/.test(model);
 }
 // Models that default ADAPTIVE THINKING ON when `thinking` is omitted (Sonnet 5,
-// Mythos 5). Our deterministic structured-output calls don't set `thinking`, and
+// Haiku 5.5, Mythos 5). Our deterministic structured-output calls don't set `thinking`, and
 // thinking shares the max_tokens budget — leaving it on risks truncating the JSON.
 // loggedMessagesCreate defaults it OFF for these unless a caller opts in. (Fable
 // rejects an explicit `disabled`, but we never select Fable here.)
 export function modelDefaultsThinkingOn(model: string): boolean {
-  return /sonnet-5|mythos/.test(model);
+  return /sonnet-5|haiku-5-5|mythos/.test(model);
 }
 // Sonnet 5.5 REJECTS `thinking: {type: 'disabled'}` (HTTP 400); its lowest
 // setting is `between_tools` — no up-front thinking, and without tools the

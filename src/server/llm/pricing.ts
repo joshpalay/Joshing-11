@@ -38,24 +38,21 @@ export type ModelPrice = {
 // Keyed by the exact model string passed to the provider SDK.
 export const MODEL_PRICING: Record<string, ModelPrice> = {
   // ── Anthropic (verified, claude-api skill model table) ──
-  // Sonnet 5 — prod generation model since the 2026-07-01 ANTHROPIC_MODEL flip.
-  // Sticker price ($3/$15); Anthropic bills an introductory $2/$10 through
-  // 2026-08-31, so ledger-derived $ slightly OVER-estimates the actual bill until
-  // then — the safe direction for the monthly spend cap. Without this row every
-  // Sonnet 5 call was "unpriced" ($0 in getMonthToDateLlmSpendUsd and the readout).
+  // Sonnet 5's $2/$10 introductory price became permanent on 2026-08-10.
   'claude-sonnet-5': {
-    inputPerMtok: 3.0,
-    outputPerMtok: 15.0,
-    cacheReadPerMtok: 0.3, // ~0.1x input
-    cacheWritePerMtok: 3.75, // ~1.25x input (5m TTL)
+    inputPerMtok: 2.0,
+    outputPerMtok: 10.0,
+    cacheReadPerMtok: 0.2,
+    cacheWritePerMtok: 2.5,
   },
-  // Sonnet 5.5 — same price as Sonnet 5 (Anthropic migration guide). Row added
-  // before the ANTHROPIC_MODEL flip so its calls are never ledgered as $0.
+  // Sonnet 5.5 launched at $2/$10 on 2026-09-28. Cache reads fell from
+  // $0.20 to $0.10 on 2026-10-07. This is the current-rate catalog; reports
+  // reprice historical usage at current rates and are not provider invoices.
   'claude-sonnet-5-5': {
-    inputPerMtok: 3.0,
-    outputPerMtok: 15.0,
-    cacheReadPerMtok: 0.3, // ~0.1x input
-    cacheWritePerMtok: 3.75, // ~1.25x input (5m TTL)
+    inputPerMtok: 2.0,
+    outputPerMtok: 10.0,
+    cacheReadPerMtok: 0.1,
+    cacheWritePerMtok: 2.5,
   },
   // Sonnet 4.6 — generation.
   'claude-sonnet-4-6': {
@@ -70,6 +67,15 @@ export const MODEL_PRICING: Record<string, ModelPrice> = {
     outputPerMtok: 5.0,
     cacheReadPerMtok: 0.1,
     cacheWritePerMtok: 1.25,
+  },
+  // Haiku 5.5: short-prompt tier (<=100k input tokens). The >100k tier is
+  // $0.50/$2.50 with $0.05 cache reads and $0.625 5m cache writes; the
+  // estimator below selects that tier when total prompt tokens exceed 100k.
+  'claude-haiku-5-5': {
+    inputPerMtok: 0.1,
+    outputPerMtok: 0.5,
+    cacheReadPerMtok: 0.01,
+    cacheWritePerMtok: 0.125,
   },
 
   // ── OpenAI (confirmed June 2026; cache fields inert on this path — see header) ──
@@ -152,7 +158,11 @@ export type CostEstimate = {
  * would read as complete.)
  */
 export function estimateCostUsd(model: string, tokens: UsageTokens): CostEstimate {
-  const price = MODEL_PRICING[model];
+  const basePrice = MODEL_PRICING[model];
+  const promptTokens = tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheCreateTokens;
+  const price = model === 'claude-haiku-5-5' && promptTokens > 100_000
+    ? { inputPerMtok: 0.5, outputPerMtok: 2.5, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625 }
+    : basePrice;
   if (!price) return { usd: null, unpriced: true };
   const tokenMultiplier = tokens.isBatch ? BATCH_TOKEN_DISCOUNT : 1;
   const usd =
