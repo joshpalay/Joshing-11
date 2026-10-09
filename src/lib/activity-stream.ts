@@ -260,6 +260,10 @@ export type StreamItem = {
   id: string;
   sortAt: Date;
   tier: number;
+  // Explicit evidence that another player correctly answered the viewer's
+  // canonical authored question. Never infer this from copy, got_you, or the
+  // your_question reveal: those also describe forwarded and incorrect answers.
+  authoredAnswer?: boolean;
   // The single friend this row belongs to, used to group a friend's relationship
   // activity into one per-person card on the home feed. `null` for friend-less
   // rows ("You shared…", "Everyone played…", the weekly ceremony, and the
@@ -459,6 +463,7 @@ export function activityToStreamItem(item: ActivityItemView): StreamItem {
       const domain = nm?.domain?.trim() || null;
       return {
         ...base,
+        authoredAnswer: nm?.viewerIsAuthor === true,
         line: [a, txt(' answered your question — someone shares this corner')],
         secondLine: domain,
         secondLineVoice: 'system',
@@ -819,7 +824,7 @@ function nicheTier(type: ActivityItemView['type']): number {
 export function momentToStreamItem(moment: LatelyMoment): StreamItem {
   const theyGotYou = moment.dir === 'they_got_you';
   const topic = moment.category;
-  const friend = { name: moment.friendName, userId: moment.friendId };
+  const friend = { name: moment.friendName?.trim() || 'A friend', userId: moment.friendId };
   // Full-sentence lone copy from the relationship pools (Appendix A), with the
   // topic folded into the line so there's no echoed second line. Moments are
   // human-authored by query construction (house/LLM questions are excluded), so
@@ -831,6 +836,9 @@ export function momentToStreamItem(moment: LatelyMoment): StreamItem {
     id: moment.momentId,
     sortAt: moment.answeredAt,
     tier: latelyTierForMomentDir(moment.dir),
+    // getLatelyMoments checks canonical creatorId, another answerer, and the
+    // correct answerState. This direction therefore establishes authorship.
+    authoredAnswer: theyGotYou,
     // they_got_you is the headline social signal — home-eligible. you_got_them is
     // quieter; keep it to the full list.
     homeEligible: theyGotYou,

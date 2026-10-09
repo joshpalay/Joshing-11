@@ -503,6 +503,23 @@
 
 
 @layer components {
+  /* A quiet authored-answer excerpt. All overrides are local to this card;
+     the shared activity log and other brand surfaces keep their own palette. */
+  .authored-answer-card {
+    --activity-feature-label: var(--accent-gold-ink);
+    --brand-ink-400: var(--brand-ink-700);
+  }
+
+  .dark .authored-answer-card {
+    --editorial-parchment: var(--brand-navy);
+    --brand-ink: var(--brand-cream-page);
+    --brand-ink-700: color-mix(in srgb, var(--brand-cream-page) 75%, var(--brand-navy));
+    --brand-ink-400: var(--brand-ink-700);
+    --brand-link: var(--brand-cream-page);
+    --brand-border: var(--border);
+    --activity-feature-label: var(--brand-ink-700);
+  }
+
   .card {
     @apply rounded-[var(--radius-card)] border bg-card text-card-foreground shadow-[var(--shadow-card)];
   }
