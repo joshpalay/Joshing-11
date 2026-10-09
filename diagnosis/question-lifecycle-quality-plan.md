@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2055,5 +2055,79 @@ throttle; confirmed zero overlap with any of the five tracked files.
 4. `batch_dedup`/`recent_history` `failed_open` eased on the rolling
    window this reading (27/447, 6/447) — not a reversal, just older events
    aging out; keep watching for recurrence.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-09 (diagnosis-review) — `batch_dedup`/`quality` counters shift on the rolling window (old events aging out, not a reversal); no dispute-queue activity; build p50 essentially flat; `subject_entity` coverage holds; no new code
+
+**Environment note:** fresh container this session — `node_modules`
+absent at start, `npm install` ran clean. No `.env`/`.env.local` present.
+Live, read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available. `check:category-integrity` reproduced
+by hand this session — see `answer-leak-domain-drift-plan.md`'s
+2026-10-09 entry (same session) for the full verdict (`ok`, no hard
+failures, same soft-finding shape as every prior reading); not repeated
+here since the check is shared across all five diagnosis docs.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 438 | 51 | 6 |
+| `batch_dedup` | 438 | **19** | 27 |
+| `quality` | 438 | 181 | 1 |
+
+`considered` fell slightly 447→438 — the rolling 14-day window again (an
+older day's traffic aged out, consistent with this doc's own convention,
+not a new finding). `recent_history`'s `failed_open` holds flat at 6.
+`batch_dedup`'s `dropped` count fell 23→19 on the same rolling-window
+mechanism (`failed_open` itself holds flat at 27). `quality`'s
+`failed_open` holds flat at 1 (the 2026-10-02 event remains the only one
+in the 14-day window); scoped drop rate (41.3%) stays inside the
+acceptable band.
+
+**`#1702` dispute queue: no new submission, no new resolution activity.**
+`GradeDispute` status counts (all-time): `pending` **49** (unchanged),
+`alternative_added` 32 (unchanged), `dismissed` 5 (unchanged).
+`max(reviewed_at)` across the whole table is still
+**2026-10-02T00:17:52.816Z** — no human review since then. Decision 4
+(Phase 4's labeled set) remains exactly where it was.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0** newly-generated rows missing it
+since that timestamp, re-queried directly.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,216ms** (n=44, essentially flat vs. 37,352ms at n=44 last review) —
+still well above the 25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-10-09 entry (read, not
+re-derived): that doc's outlier/elevated-residual share ticks up slightly
+to 32.9% and its headline finding this pass (a new 23.1s outlier, well
+down the ranking) is unrelated to this doc's p50 reading. The standing
+explanation for the elevated p50 (the untraced outlier cluster) is
+unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log` on all five
+between the last-reviewed commit and today's `main` head returns nothing
+(the only two new commits, `#1757` and the Cassian Haiku 5.5 eval, touch
+neither).
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data.
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s rolling-window `failed_open` (flat at 1) stays
+   isolated or recurs again.
+4. `batch_dedup`/`recent_history` `failed_open` hold flat this reading
+   (27/438, 6/438) — keep watching for recurrence or further easing as the
+   rolling window moves.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

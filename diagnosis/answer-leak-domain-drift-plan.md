@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3172,5 +3172,87 @@ recommended-but-unrun blind-labeling pass, now at 87 of 638.
 3. A blind-labeling pass on `answer_leak_any_token` remains due (now 87 of
    638) — recommended since 2026-09-25, still not run.
 4. The six open `ContentReport` rows remain unaddressed, now 32 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-09 (diagnosis-review) — 32 clean days on `answer_leak_partial`; everything else incremental, no decision-resolving change
+
+**Environment note:** fresh container this session — `node_modules` absent
+at start, `npm install` ran clean (807 packages; reverted the incidental
+`package-lock.json` lockfile churn from resolving two `"latest"` pins before
+committing, since it's unrelated to this review). No `.env`/`.env.local`
+present (only `.env.example`'s empty placeholders), so `npm run
+check:category-integrity` still can't run directly (`DATABASE_URL` absent).
+Live, read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available. Reproduced the audit's five queries by
+hand via Supabase MCP and fed the exact rows through the real
+`analyzeCategoryIntegrity` function via a throwaway script (not committed).
+**Verdict: `ok`** — zero hard failures (`nodeKeyMismatches: 0`,
+`orphanEdges: 0`, `hasCycle: false`, `graphSourceMerges: 0`). Soft findings
+unchanged in shape from every prior reading: the same 4 `splitKeys` (Classic
+Childrens' Television apostrophe variant, Greek Mythology/mythology, Human
+Anatomy & Physiology/and Physiology, Spy School series/Series) and the same
+3 Rent/Renaissance-Counterpoint `bankKeyMismatches`.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 848 | 0 | 0 |
+| `domain_drift` | 848 | 1 | 0 |
+| `answer_leak_single_word` | 745 | 2 | 0 |
+| `answer_leak_any_token` | 662 | **89** | 0 |
+| `answer_shape` | 848 | 2 | 0 |
+| `quality` | 848 | 339 | 231 (unchanged since 2026-10-03) |
+
+`answer_leak_partial` now at **32 consecutive clean days**, 848 considered
+(up from 824) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 824→848 considered) — the 2026-10-01 hit's Vercel log
+still hasn't been pulled by anyone. `answer_leak_single_word` gained 24
+considered (721→745), no new drop. `answer_leak_any_token` gained 2 more
+drops (87→89, 638→662 considered) — the recommended blind-labeling pass
+(open decision 6) remains unrun, now further past the ~13-hit threshold
+than ever (recommended since 2026-09-25, 14 days ago). `quality`'s
+`failed_open` stays flat at 231 — no further recurrence of the 2026-10-02
+`daily_build`-scope event.
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+id, all still `status='open'`:** `139e1932…` (`2327a4a1…`), `800c44a3…`
+(`8a776f5f…`), `357618e3…` (`8254bf9a…`) — the first three — plus
+`b1804847…` (`c77a8c53…`), `3c3f9989…` (`8887c3dc…`), `815b3ad8…`
+(`458795ac…`) — the 2026-09-06-evening three — now **33 days** since
+filing.
+
+**Bank `still_servable` (is_duplicate=false): 2,742**, up from 2,726 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** The only two commits on
+`main` since the last review's commit are `#1757` ("stop a 404'd batch run
+from blocking verification forever") and an untitled "Cassian: evaluate
+Haiku 5.5 question writing" commit — diffed both directly: `#1757` touches
+only `src/server/quality/verify-batch.ts` and its test (verification-batch
+retry logic, unrelated to the gate chain); the Cassian commit touches only
+`Cassian/*` docs and `scripts/cassian-*.ts` (an unrelated admin pilot tool).
+Neither touches `self-answering.ts`, `off-domain-second-opinion.ts`,
+`generate-questions.ts`, `sweep-bank-quality.ts`, or
+`rewrite-bank-demotions.ts`.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment (no `.env` file present at all). Stands at 9/11 from its
+last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 89 of 662.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 32+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 89 of
+   662) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 33 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
