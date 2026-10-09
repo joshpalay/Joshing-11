@@ -102,6 +102,8 @@ export type ActivityItemView = Pick<
     nicheMatch?: {
       domain: string | null;
       questionText: string | null;
+      // Identity checked against the canonical question, not its sender.
+      viewerIsAuthor?: boolean;
     };
     authoredSharedQuestion?: {
       domain: string;
@@ -825,6 +827,7 @@ async function hydrateNicheMatchQuestions(items: ActivityItemRow[]) {
   const questionRows = await db
     .select({
       id: questions.id,
+      creatorId: questions.creatorId,
       questionText: questions.questionText,
       canonicalSubcategory: questions.canonicalSubcategory,
       broadCategory: questions.broadCategory,
@@ -842,6 +845,10 @@ async function hydrateNicheMatchQuestions(items: ActivityItemRow[]) {
         {
           domain: q ? (q.canonicalSubcategory ?? q.broadCategory ?? null) : null,
           questionText: q?.questionText ?? null,
+          viewerIsAuthor:
+            q?.creatorId === item.userId &&
+            Boolean(item.actorUserId) &&
+            item.actorUserId !== item.userId,
         } satisfies NonNullable<ActivityItemView['reference']['nicheMatch']>,
       ];
     }),

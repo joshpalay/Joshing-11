@@ -2007,6 +2007,7 @@ function FeedListContent({
           // ledger; the full /activities log keeps its timestamps.
           showTimestamp={!homeZoneCards}
           elevated={homeZoneCards}
+          featureAuthoredAnswers={unifiedHome && !pendingQueue}
         />
       )
     }

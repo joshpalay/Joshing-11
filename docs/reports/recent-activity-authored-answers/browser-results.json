@@ -1,0 +1,153 @@
+{
+  "checks": [
+    "Featured card initially expanded; question and canonical answer visible; adjacent routine rows stay collapsed.",
+    "Explicit collapse persists through a parent rerender with a new item object.",
+    "Enter and Space toggle expansion; aria-expanded and aria-controls identify the reveal.",
+    "Keyboard activation of the player link retains navigation and does not toggle the card.",
+    "Existing send menu opens and Escape closes it.",
+    "375px and 390px layouts retain full long names/categories/questions without card or page overflow; touch targets are at least 44px.",
+    "Long-card answer remains reachable above the fixture’s fixed FAB and bottom navigation.",
+    "Every featured-card text style exceeds 4.5:1 contrast in light and forced-dark themes.",
+    "Desktop and forced-dark featured card verified; no disclosure animation under reduced motion.",
+    "No browser runtime errors or render-generated API requests; existing send menu fetches invite links only when opened."
+  ],
+  "layouts": [
+    {
+      "viewport": 390,
+      "pageWidth": 390,
+      "cardWidth": 358,
+      "contentWidth": 357,
+      "touchHeight": 99.265625,
+      "sendTarget": [
+        44,
+        44
+      ],
+      "answerColor": "rgb(58, 74, 95)",
+      "background": "color(srgb 0.971843 0.953569 0.921412)",
+      "font": "PreviewJosefin"
+    },
+    {
+      "viewport": 375,
+      "pageWidth": 375,
+      "cardWidth": 343,
+      "contentWidth": 342,
+      "touchHeight": 99.265625,
+      "sendTarget": [
+        44,
+        44
+      ],
+      "answerColor": "rgb(58, 74, 95)",
+      "background": "color(srgb 0.971843 0.953569 0.921412)",
+      "font": "PreviewJosefin"
+    },
+    {
+      "viewport": 375,
+      "pageWidth": 375,
+      "cardWidth": 343,
+      "contentWidth": 342,
+      "touchHeight": 197.921875,
+      "sendTarget": [
+        44,
+        44
+      ],
+      "answerColor": "rgb(58, 74, 95)",
+      "background": "color(srgb 0.971843 0.953569 0.921412)",
+      "font": "PreviewJosefin"
+    },
+    {
+      "viewport": 1280,
+      "pageWidth": 1280,
+      "cardWidth": 640,
+      "contentWidth": 639,
+      "touchHeight": 76.328125,
+      "sendTarget": [
+        44,
+        44
+      ],
+      "answerColor": "rgb(58, 74, 95)",
+      "background": "color(srgb 0.971843 0.953569 0.921412)",
+      "font": "PreviewJosefin"
+    },
+    {
+      "viewport": 1280,
+      "pageWidth": 1280,
+      "cardWidth": 640,
+      "contentWidth": 639,
+      "touchHeight": 76.328125,
+      "sendTarget": [
+        44,
+        44
+      ],
+      "answerColor": "color(srgb 0.771569 0.786274 0.8)",
+      "background": "rgb(31, 58, 90)",
+      "font": "PreviewJosefin"
+    }
+  ],
+  "contrasts": {
+    "light": [
+      {
+        "text": "YOUR QUESTION, ANSWERED",
+        "ratio": 5.370161957399672
+      },
+      {
+        "text": "Chiann",
+        "ratio": 14.895701999089859
+      },
+      {
+        "text": "Post-Conquest Medieval English Court Culture",
+        "ratio": 8.178023077905607
+      },
+      {
+        "text": "Question",
+        "ratio": 8.178023077905607
+      },
+      {
+        "text": "Which language became the language of the Englis",
+        "ratio": 14.895701999089859
+      },
+      {
+        "text": "Answer",
+        "ratio": 8.178023077905607
+      },
+      {
+        "text": "Norman French",
+        "ratio": 8.178023077905607
+      }
+    ],
+    "dark": [
+      {
+        "text": "YOUR QUESTION, ANSWERED",
+        "ratio": 6.906055668691499
+      },
+      {
+        "text": "Chiann",
+        "ratio": 10.959076669489969
+      },
+      {
+        "text": "Post-Conquest Medieval English Court Culture",
+        "ratio": 6.906055668691499
+      },
+      {
+        "text": "Question",
+        "ratio": 6.906055668691499
+      },
+      {
+        "text": "Which language became the language of the Englis",
+        "ratio": 10.959076669489969
+      },
+      {
+        "text": "Answer",
+        "ratio": 6.906055668691499
+      },
+      {
+        "text": "Norman French",
+        "ratio": 6.906055668691499
+      }
+    ]
+  },
+  "errors": [],
+  "apiRequests": [
+    "http://127.0.0.1:4179/api/account/invite-links"
+  ],
+  "limitations": "Isolated production-component fixture; unrelated child flows stubbed. Fixed chrome reproduces app positioning. Live authenticated Home and physical Safari not exercised."
+}

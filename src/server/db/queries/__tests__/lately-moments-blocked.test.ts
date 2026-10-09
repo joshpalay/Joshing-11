@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // the real WHERE it builds (which includes the live notBlockedForViewer call),
 // extract the blocked node and assert the four-point matrix on THIS surface:
 //   1. blocked + non-owner → EXCLUDED   2. blocked + owner → INCLUDED   4. public → unaffected.
-type Row = { visibility: string; creatorId: string | null };
+type Row = { visibility: string; creatorId: string | null; [key: string]: unknown };
 interface Node {
   op: string;
   column?: unknown;
@@ -28,8 +28,8 @@ vi.mock('drizzle-orm', () => {
     ...evaluable,
     desc: vi.fn((column) => ({ op: 'desc', column })),
     gte: vi.fn((column, value) => ({ op: 'gte', column, value })),
-    inArray: vi.fn((column, values) => ({ op: 'inArray', column, values })),
-    isNotNull: vi.fn((column) => ({ op: 'isNotNull', column })),
+    inArray: vi.fn((column, values) => ({ op: 'inArray', column, values, test: (r: Row) => values.includes(r[column]) })),
+    isNotNull: vi.fn((column) => ({ op: 'isNotNull', column, test: (r: Row) => r[column] != null })),
     isNull: vi.fn((column) => ({ op: 'isNull', column })),
     sql: vi.fn(() => ({ op: 'sql', as: vi.fn(() => ({ op: 'sqlAs' })) })),
   };
@@ -101,5 +101,26 @@ describe('getLatelyMoments wires in the visibility=blocked hard-block', () => {
     await getLatelyMoments(VIEWER);
     const blocked = findBlockedOr(capturedWhere)!;
     expect(blocked.test!({ visibility: 'public', creatorId: 'author-1' })).toBe(true);
+  });
+});
+
+describe('authored-answer eligibility in the real moment query', () => {
+  const correctAuthored: Row = {
+    visibility: 'public', creatorId: VIEWER, meUserId: 'chiann',
+    meSourceType: 'live_correct', meAnswerState: 'first_correct', meQuestionId: 'norman',
+  };
+  it.each(['first_correct', 'first_correct_after_wrong', 'repeat_correct'])('accepts %s on a genuinely authored question', async meAnswerState => {
+    await getLatelyMoments(VIEWER);
+    expect(capturedWhere!.test!({ ...correctAuthored, meAnswerState })).toBe(true);
+  });
+  it.each([
+    { creatorId: 'someone-else' }, // Viewer merely played/shared/forwarded it.
+    { creatorId: null }, // Generated or tombstoned question.
+    { meAnswerState: 'incorrect' }, // Source-type names do not prove correctness.
+    { meUserId: VIEWER }, // A self-answer is not a social recognition event.
+    { meSourceType: 'author_credit' }, // Credit rows do not identify an answerer.
+  ])('rejects unsafe recognition evidence %j', async override => {
+    await getLatelyMoments(VIEWER);
+    expect(capturedWhere!.test!({ ...correctAuthored, ...override })).toBe(false);
   });
 });

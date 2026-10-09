@@ -2,7 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
-import { useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useId, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import { FriendRequestActions } from '@/app/activities/FriendRequestActions';
 import { ReactionGotItButton } from '@/app/activities/ReactionGotItButton';
@@ -119,6 +119,7 @@ export function ActivityStreamItem({
   nested = false,
   showTimestamp = true,
   elevated = false,
+  featureAuthoredAnswers = false,
   onQuestionResolved,
 }: {
   item: StreamItem;
@@ -136,6 +137,8 @@ export function ActivityStreamItem({
   // page as the thing you can play, while the ambient one-liners stay flat. Off
   // by default (the full /activities log keeps every row flat).
   elevated?: boolean;
+  // Home's Recent Activity only. Shared logs retain their compact defaults.
+  featureAuthoredAnswers?: boolean;
   // Fires after a milestone question is resolved in place (answered right or
   // wrong). The pending-playables overflow subpage (B-HOME-OVERFLOW-02 §7)
   // uses it to invalidate the client router cache so Home recomputes its
@@ -143,12 +146,20 @@ export function ActivityStreamItem({
   onQuestionResolved?: () => void;
 }) {
   const expandable = questionBacked(item.expand);
-  // From Friends milestone cards on the home/elevated surface default to OPEN so
-  // the friend's questions are visible without a tap (request 2026-07-09). The
-  // flat /activities one-liners and texture reveals still default closed — this
-  // is scoped to the elevated, playable milestone bundle (the From Friends card).
+  const featuredQuestion =
+    featureAuthoredAnswers &&
+    item.authoredAnswer === true &&
+    !nested &&
+    (item.expand?.kind === 'your_question' || item.expand?.kind === 'niche_match')
+      ? item.expand.question
+      : null;
+  const featuredCard = Boolean(featuredQuestion?.text?.trim());
+  const expansionId = useId();
+  // Home's verified authored answers and elevated From Friends bundles start
+  // open. Seed once at mount; ordinary rerenders must preserve a user's collapse.
+  // The shared /activities log and other texture reveals retain closed defaults.
   const [open, setOpen] = useState(
-    () => expandable && elevated && !nested && item.expand?.kind === 'milestone',
+    () => featuredCard || (expandable && elevated && !nested && item.expand?.kind === 'milestone'),
   );
 
   // CORRECTION 3 (revised): the answered-of-total state is conveyed by the
@@ -215,9 +226,8 @@ export function ActivityStreamItem({
   // the open expansion; a dismiss undo un-ticks it.
   const [expansionResolved, setExpansionResolved] = useState(0);
   const answeredCount =
-    (milestoneQuestions ?? []).filter(
-      (q) => isResolved(q.questionId) || isDismissed(q.questionId),
-    ).length + expansionResolved;
+    (milestoneQuestions ?? []).filter((q) => isResolved(q.questionId) || isDismissed(q.questionId))
+      .length + expansionResolved;
 
   // The "{remaining} of {total} questions" count under a milestone line — how
   // many are still answerable (D-HOME-DASHBOARD-MODEL-01 point 3), in lockstep
@@ -248,7 +258,8 @@ export function ActivityStreamItem({
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (!expandable) return;
+    // A profile link inside the header owns its own keyboard interaction.
+    if (!expandable || e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       toggle();
@@ -314,42 +325,112 @@ export function ActivityStreamItem({
   const containerStyle: CSSProperties = nested
     ? // Nested under a per-person heading: no border/fill, light padding.
       { padding: opened ? '6px 0' : '4px 0' }
-    : editorialCard
+    : featuredCard
       ? {
-          padding: opened ? '16px 14px' : '14px',
-          // The playable "From Friends" milestone cards take the elevated feed
-          // fill token (defaults to the warm game-card cream) so the dev CARD
-          // COLOR cycler repaints them alongside the For You cards, and the same
-          // neutral hairline stroke as the Today's 5 card (no gold accent).
-          background: 'var(--feed-card-elevated)',
-          border: '1px solid var(--brand-border)',
-          borderRadius: 4,
-          // Match the Today's 5 card's shadow (--shadow-card) rather than the
-          // stronger raised tier. The strong shadow shares the same blur but at
-          // 10% vs 4% opacity, so its visible halo bled ~15px past the right
-          // edge and made these cards read as WIDER than the Today card even
-          // though the box edges align to the pixel.
-          boxShadow: 'var(--shadow-card)',
+          padding: '14px',
+          margin: '8px 0',
+          background: 'var(--editorial-parchment)',
+          border: `1px solid ${RULE}`,
+          borderRadius: 'var(--radius-card)',
+          minWidth: 0,
+          overflowWrap: 'anywhere',
         }
-      : opened
-        ? // Opened reveal: a soft paper wash defines the expanded cluster, with
-          // the same very-light hairline below as the flat rows so the stream
-          // keeps an even rhythm of dividers whether a row is open or closed.
-          {
-            padding: '16px 2px',
-            background: PAPER,
-            borderBottom: `1px solid ${RULE}`,
+      : editorialCard
+        ? {
+            padding: opened ? '16px 14px' : '14px',
+            // The playable "From Friends" milestone cards take the elevated feed
+            // fill token (defaults to the warm game-card cream) so the dev CARD
+            // COLOR cycler repaints them alongside the For You cards, and the same
+            // neutral hairline stroke as the Today's 5 card (no gold accent).
+            background: 'var(--feed-card-elevated)',
+            border: '1px solid var(--brand-border)',
+            borderRadius: 4,
+            // Match the Today's 5 card's shadow (--shadow-card) rather than the
+            // stronger raised tier. The strong shadow shares the same blur but at
+            // 10% vs 4% opacity, so its visible halo bled ~15px past the right
+            // edge and made these cards read as WIDER than the Today card even
+            // though the box edges align to the pixel.
+            boxShadow: 'var(--shadow-card)',
           }
-        : // Calm default: a very-light hairline separates consecutive rows so the
-          // one-liners read as a divided list rather than relying on whitespace
-          // alone.
-          { padding: '14px 2px', borderBottom: `1px solid ${RULE}` };
+        : opened
+          ? // Opened reveal: a soft paper wash defines the expanded cluster, with
+            // the same very-light hairline below as the flat rows so the stream
+            // keeps an even rhythm of dividers whether a row is open or closed.
+            {
+              padding: '16px 2px',
+              background: PAPER,
+              borderBottom: `1px solid ${RULE}`,
+            }
+          : // Calm default: a very-light hairline separates consecutive rows so the
+            // one-liners read as a divided list rather than relying on whitespace
+            // alone.
+            { padding: '14px 2px', borderBottom: `1px solid ${RULE}` };
 
   // The tappable header row — the in-place expand/collapse button for an
   // expandable item (a playable milestone bundle or a texture reveal).
   const rowInner = (
     <>
-      {editorialCard ? (
+      {featuredCard ? (
+        <>
+          <ActivityIcon spec={iconSpec} seed={item.id} open={opened} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p
+              style={{
+                margin: '0 0 6px',
+                fontFamily: FM,
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.11em',
+                lineHeight: 1.5,
+                color: 'var(--activity-feature-label)',
+              }}
+            >
+              YOUR QUESTION, ANSWERED
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-serif)',
+                fontSize: 22,
+                fontWeight: 500,
+                lineHeight: 1.2,
+                color: INK,
+              }}
+            >
+              <ActorLink
+                name={item.line.find((part) => part.t === 'actor')?.name?.trim() || 'A friend'}
+                userId={item.friendId ?? null}
+                style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, color: INK }}
+              />{' '}
+              knew the answer.
+            </p>
+            {featuredQuestion?.domain?.trim() ? (
+              <p
+                style={{
+                  margin: '6px 0 0',
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 17,
+                  lineHeight: 1.35,
+                  color: INK2,
+                }}
+              >
+                {featuredQuestion.domain}
+              </p>
+            ) : null}
+          </div>
+          <ChevronDown
+            aria-hidden
+            style={{
+              width: 16,
+              height: 16,
+              flexShrink: 0,
+              marginLeft: 8,
+              color: INK2,
+              transform: open ? 'rotate(180deg)' : undefined,
+            }}
+          />
+        </>
+      ) : editorialCard ? (
         // Elevated home card (playable From Friends milestones only): an
         // editorial two-line headline — the person's NAME in the large serif,
         // the rest of the sentence in a medium serif below it — with the
@@ -554,7 +635,8 @@ export function ActivityStreamItem({
                 {/* Same remaining count as the elevated (home) card above — the
                     two layouts read "0 of 4" vs "4 of 4" for one bundle when
                     this line counted answered instead (QA 2026-09-27, S1). */}
-                {milestoneProgress.total - milestoneProgress.answered} of {milestoneProgress.total} questions
+                {milestoneProgress.total - milestoneProgress.answered} of {milestoneProgress.total}{' '}
+                questions
               </p>
             ) : null}
           </div>
@@ -595,11 +677,16 @@ export function ActivityStreamItem({
   if (playableCard && allAnswered) return null;
 
   return (
-    <div id={item.anchorId ?? undefined} style={containerStyle}>
+    <div
+      id={item.anchorId ?? undefined}
+      className={featuredCard ? 'authored-answer-card' : undefined}
+      style={containerStyle}
+    >
       <div
         role={expandable ? 'button' : undefined}
         tabIndex={expandable ? 0 : undefined}
         aria-expanded={expandable ? open : undefined}
+        aria-controls={expandable ? expansionId : undefined}
         onClick={toggle}
         onKeyDown={handleKeyDown}
         style={{
@@ -607,6 +694,7 @@ export function ActivityStreamItem({
           alignItems: 'flex-start',
           cursor: expandable ? 'pointer' : 'default',
           WebkitTapHighlightColor: 'transparent',
+          minHeight: featuredCard ? 44 : undefined,
         }}
       >
         {rowInner}
@@ -622,7 +710,7 @@ export function ActivityStreamItem({
       ) : null}
 
       {expandable && open && expand ? (
-        <div style={{ marginLeft: EXPANSION_INDENT }}>
+        <div id={expansionId} style={{ marginLeft: EXPANSION_INDENT }}>
           {expand.kind === 'milestone' ? (
             playableCard ? (
               // The playable home/overflow card expands in place to the From
@@ -661,7 +749,7 @@ export function ActivityStreamItem({
           ) : expand.kind === 'same_correct' ? (
             <ConvergenceExpansion expand={expand} />
           ) : (
-            <SendOnwardExpansion expand={expand} />
+            <SendOnwardExpansion expand={expand} featured={featuredCard} />
           )}
         </div>
       ) : null}
@@ -911,8 +999,10 @@ export function ConvergenceExpansion({
 
 function SendOnwardExpansion({
   expand,
+  featured = false,
 }: {
   expand: Extract<StreamExpand, { kind: 'your_question' | 'niche_match' }>;
+  featured?: boolean;
 }) {
   const question: StreamQuestion = expand.question;
 
@@ -925,9 +1015,24 @@ function SendOnwardExpansion({
         paddingLeft: 12,
         // The row container has only 2px side padding; without this the text
         // and the Send glyph run into the card's right edge.
-        paddingRight: 12,
+        paddingRight: featured ? 0 : 12,
       }}
     >
+      {featured ? (
+        <p
+          style={{
+            margin: '0 0 4px',
+            fontFamily: FM,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.11em',
+            textTransform: 'uppercase',
+            color: INK2,
+          }}
+        >
+          Question
+        </p>
+      ) : null}
       <p style={REVEALED_QUESTION_STYLE}>{question.text}</p>
       {question.correctAnswer ? <RevealedAnswerLine answer={question.correctAnswer} /> : null}
 
@@ -957,7 +1062,11 @@ function SendOnwardExpansion({
             wrote it); an unplayed question gets no plane. */}
         {question.correctAnswer ? (
           <SendOnwardMenu
-            question={{ id: question.questionId, text: question.text, domain: question.domain ?? '' }}
+            question={{
+              id: question.questionId,
+              text: question.text,
+              domain: question.domain ?? '',
+            }}
             answer={question.correctAnswer}
             buttonStyle={SEND_BUTTON_STYLE}
           />
