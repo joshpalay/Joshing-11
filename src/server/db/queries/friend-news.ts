@@ -28,6 +28,12 @@ export type FriendNews = {
   newFriends: Array<{ friendId: string; name: string }>;
   /** People this player invited who just played their first five. */
   invitedStarted: Array<{ friendId: string; name: string }>;
+  /**
+   * People who said yes to THIS player's friend request and the player hasn't
+   * seen it yet (unread follow_approved). A subset of newFriends — the daily
+   * text/email say it the "said yes" way; the weekly email keeps newFriends.
+   */
+  acceptedYourRequest: Array<{ friendId: string; name: string }>;
 };
 
 export const EMPTY_FRIEND_NEWS: FriendNews = {
@@ -35,6 +41,7 @@ export const EMPTY_FRIEND_NEWS: FriendNews = {
   newQuestionsFromFriends: [],
   newFriends: [],
   invitedStarted: [],
+  acceptedYourRequest: [],
 };
 
 function nameOf(displayName: string | null | undefined): string {
@@ -100,6 +107,7 @@ export async function getFriendNews(userId: string, since: Date): Promise<Friend
         type: activityItems.type,
         actorUserId: activityItems.actorUserId,
         actorName: users.displayName,
+        read: activityItems.read,
       })
       .from(activityItems)
       .innerJoin(users, eq(users.id, activityItems.actorUserId))
@@ -139,14 +147,23 @@ export async function getFriendNews(userId: string, since: Date): Promise<Friend
   // (unfollowed or blocked since) and de-duplicate across the two follow types.
   const newFriends = new Map<string, string>();
   const invitedStarted = new Map<string, string>();
+  const acceptedYourRequest = new Map<string, string>();
   for (const row of activityRows) {
     if (!row.actorUserId || !nameById.has(row.actorUserId)) continue;
     const target = row.type === 'invited_friend_played_first_five' ? invitedStarted : newFriends;
     target.set(row.actorUserId, nameOf(row.actorName));
+    // Unread = the home "said yes" card hasn't been dismissed and the bell
+    // hasn't been opened; once they've seen it, it's just a new friend.
+    if (row.type === 'follow_approved' && !row.read) {
+      acceptedYourRequest.set(row.actorUserId, nameOf(row.actorName));
+    }
   }
   // Someone whose invite just stuck is also a new friend — say it once, the
   // warmer way.
-  for (const id of invitedStarted.keys()) newFriends.delete(id);
+  for (const id of invitedStarted.keys()) {
+    newFriends.delete(id);
+    acceptedYourRequest.delete(id);
+  }
 
   const toList = (m: Map<string, string>) =>
     [...m].map(([friendId, name]) => ({ friendId, name }));
@@ -156,5 +173,6 @@ export async function getFriendNews(userId: string, since: Date): Promise<Friend
     newQuestionsFromFriends,
     newFriends: toList(newFriends),
     invitedStarted: toList(invitedStarted),
+    acceptedYourRequest: toList(acceptedYourRequest),
   };
 }
