@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2129,5 +2129,85 @@ neither).
 4. `batch_dedup`/`recent_history` `failed_open` hold flat this reading
    (27/438, 6/438) — keep watching for recurrence or further easing as the
    rolling window moves.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-10 (diagnosis-review) — two new `GradeDispute` resolutions, same automated signature as every prior one; `batch_dedup`/`recent_history` `failed_open` both ease on the rolling window; build p50 essentially flat; `subject_entity` coverage holds; no new code
+
+**Environment note:** fresh container this session — `node_modules`
+absent at start, `npm install` ran clean. No `.env`/`.env.local` present.
+Live, read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available. `check:category-integrity` reproduced
+by hand this session — see `answer-leak-domain-drift-plan.md`'s
+2026-10-10 entry (same session) for the full verdict (`ok`, no hard
+failures, same soft-finding shape as every prior reading) and detail; not
+repeated here since the check is shared across all five diagnosis docs.
+
+**`#1702` dispute queue: two new resolutions, same automated signature as
+every one before them.** `GradeDispute` status counts (all-time): `pending`
+49 (unchanged), `alternative_added` **34** (was 32), `dismissed` 5
+(unchanged). The two new rows (`6cb4da42-…` and `bcfcd980-…`, both a
+Michigan Mock Trial "Rule 404 / character evidence" dispute split across
+two answer slots of the same question) both have `review_decision='accept'`,
+`answer_id` prefixed `daily:`, and `reviewed_at` within ~0.4–0.5 seconds of
+`created_at` — the same self-resolving-on-insert shape every prior
+resolution in this table has shown (per the 2026-10-02 entry's sampling of
+the 10 most recent). `max(reviewed_at)` moves to **2026-10-09T21:54:03.529Z**
+(was 2026-10-02T00:17:52.816Z). No evidence of human review in either new
+row; decision 4 (Phase 4's labeled set) remains exactly where it was — still
+no human-reviewed dispute in the data.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0** newly-generated rows missing it
+since that timestamp, re-queried directly.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 400 | 47 | 5 |
+| `batch_dedup` | 400 | 15 | **25** |
+| `quality` | 400 | 163 | 1 |
+
+`considered` fell 438→400 — the rolling 14-day window again (older days'
+traffic aging out, consistent with this doc's own convention, not a new
+finding). `recent_history`'s `failed_open` eased 6→5; `batch_dedup`'s
+`dropped` fell 19→15 and `failed_open` eased 27→25 — both easing on the
+same rolling-window mechanism, not a reversal. `quality`'s `failed_open`
+holds flat at 1 (the 2026-10-02 event remains the only one in the 14-day
+window); scoped drop rate (40.75%) stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,297ms** (n=43, essentially flat vs. 37,216ms at n=44 last review) —
+still well above the 25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s 2026-10-10 entry (read, not
+re-derived): that doc's outlier/elevated-residual share eased slightly to
+31.9% and its two new rows from the 2026-10-09 cron are unrelated to this
+doc's p50 reading. The standing explanation for the elevated p50 (the
+untraced outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — the three new commits on
+`main` (`0a94b1a`, `c66dd15`, `8373b86`) touch `lately.ts`, `FeedList.tsx`/
+`FromFriendsStreak.tsx`, and the activity-stream/feed files respectively,
+none of the five tracked files, confirmed by diffing each commit's file
+list directly.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data (today's two new resolutions are
+   automated, same shape as every prior one).
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s rolling-window `failed_open` (flat at 1) stays
+   isolated or recurs again.
+4. `batch_dedup`/`recent_history` `failed_open` both eased this reading
+   (25/400, 5/400) — rolling-window easing, not a reversal; keep watching.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
