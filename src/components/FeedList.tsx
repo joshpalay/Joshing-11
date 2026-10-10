@@ -272,7 +272,7 @@ function RevealedAnswerLine({
   }
   return (
     <p
-      className="text-quiet italic"
+      className="text-lg italic"
       style={{ fontFamily: 'var(--font-serif)', color: 'var(--ink)', opacity: 0.7 }}
     >
       Answer: {state.answer}

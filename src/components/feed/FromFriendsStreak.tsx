@@ -561,7 +561,7 @@ function RevealedAnswer({
       style={{
         margin: 0,
         fontFamily: FS,
-        fontSize: 15,
+        fontSize: 18,
         fontStyle: 'italic',
         color: INK,
         opacity: 0.72,
