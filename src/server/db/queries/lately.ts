@@ -900,9 +900,10 @@ export async function reinstateMilestoneQuestion(userId: string, questionId: str
 
 // --- Convergence (B-Convergence-1) -------------------------------------------
 
-// Bounds the answer scan. Generous vs. the 14-day cluster window so a recent
-// cluster's boundaries stay stable: a cluster only depends on the run of
-// co-correct questions since the last reset, which 60 days comfortably covers.
+// Bounds the scan for co-correct moments. Generous vs. the 14-day cluster window
+// so a recent cluster's boundaries stay stable: a cluster only depends on the
+// run of co-correct questions since the last reset, which 60 days comfortably
+// covers.
 const CONVERGENCE_LOOKBACK_DAYS = 60;
 
 const PAIR_SEP = '\u0000';
@@ -912,6 +913,12 @@ const PAIR_SEP = '\u0000';
 // are already surfaced as the they_got_you / you_got_them moments). Derived
 // entirely from existing masteryEvents — no write path, no migration. The
 // firing / reset / single-owner rules live in `@/lib/convergence`.
+//
+// The window bounds the CO-CORRECT MOMENT (the later of the two answers), not
+// each answer. A friend who today gets right a question the viewer answered in
+// June converges today — bounding both answers dropped exactly that case, so a
+// returning friend's overlap with the viewer's older play never surfaced
+// (Sadie, 2026-10-09: 4 shared corrects, 0 cards).
 export async function getLatelyConvergences(
   userId: string,
   windowDays = CONVERGENCE_LOOKBACK_DAYS,
@@ -920,8 +927,46 @@ export async function getLatelyConvergences(
     Date.now() - windowDays * 24 * 60 * 60 * 1000,
   );
 
-  // 1. The viewer's correct answers, with each question's author so we can drop
-  //    questions the viewer wrote. Keep the EARLIEST correct moment per question.
+  // 1. Mutual friends (approved follows in BOTH directions).
+  const [following, followers] = await Promise.all([
+    db
+      .select({ id: follows.followeeId })
+      .from(follows)
+      .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved'))),
+    db
+      .select({ id: follows.followerId })
+      .from(follows)
+      .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved'))),
+  ]);
+  const followingIds = new Set(following.map((r) => r.id));
+  const mutualIds = [...new Set(followers.map((r) => r.id))].filter((id) =>
+    followingIds.has(id),
+  );
+  if (mutualIds.length === 0) return [];
+
+  // 2. Candidate questions: anything the viewer OR a mutual friend answered
+  //    correctly inside the window. A co-correct moment inside the window needs
+  //    its later answer inside the window, so this set covers every one.
+  const recentRows = await db
+    .selectDistinct({ questionId: masteryEvents.questionId })
+    .from(masteryEvents)
+    .where(
+      and(
+        inArray(masteryEvents.userId, [userId, ...mutualIds]),
+        inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
+        inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
+        isNotNull(masteryEvents.questionId),
+        gte(masteryEvents.createdAt, lookbackStart),
+      ),
+    );
+  const candidateIds = recentRows
+    .map((r) => r.questionId)
+    .filter((id): id is string => Boolean(id));
+  if (candidateIds.length === 0) return [];
+
+  // 3. The viewer's correct answers on those questions, at ANY age, with each
+  //    question's author so we can drop questions the viewer wrote. Keep the
+  //    EARLIEST correct moment per question.
   const viewerRowsRaw = await db
     .select({
       questionId: masteryEvents.questionId,
@@ -934,10 +979,9 @@ export async function getLatelyConvergences(
     .where(
       and(
         eq(masteryEvents.userId, userId),
+        inArray(masteryEvents.questionId, candidateIds),
         inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
         inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
-        isNotNull(masteryEvents.questionId),
-        gte(masteryEvents.createdAt, lookbackStart),
       ),
     );
 
@@ -968,24 +1012,8 @@ export async function getLatelyConvergences(
   const viewerQuestionIds = [...viewerByQuestion.keys()];
   if (viewerQuestionIds.length === 0) return [];
 
-  // 2. Mutual friends (approved follows in BOTH directions).
-  const [following, followers] = await Promise.all([
-    db
-      .select({ id: follows.followeeId })
-      .from(follows)
-      .where(and(eq(follows.followerId, userId), eq(follows.state, 'approved'))),
-    db
-      .select({ id: follows.followerId })
-      .from(follows)
-      .where(and(eq(follows.followeeId, userId), eq(follows.state, 'approved'))),
-  ]);
-  const followingIds = new Set(following.map((r) => r.id));
-  const mutualIds = [...new Set(followers.map((r) => r.id))].filter((id) =>
-    followingIds.has(id),
-  );
-  if (mutualIds.length === 0) return [];
-
-  // 3. Those friends' correct answers on the viewer's shared question set.
+  // 4. Those friends' correct answers on the viewer's shared question set, at
+  //    any age (the window is applied to the co-correct moment in step 6).
   const friendRows = await db
     .select({
       friendId: masteryEvents.userId,
@@ -999,8 +1027,6 @@ export async function getLatelyConvergences(
         inArray(masteryEvents.questionId, viewerQuestionIds),
         inArray(masteryEvents.sourceType, LIVE_SOURCE_TYPES),
         inArray(masteryEvents.answerState, CORRECT_ANSWER_STATES),
-        isNotNull(masteryEvents.questionId),
-        gte(masteryEvents.createdAt, lookbackStart),
       ),
     );
 
@@ -1013,14 +1039,15 @@ export async function getLatelyConvergences(
   }
   if (friendByPair.size === 0) return [];
 
-  // 4. Friend display names.
+  // 5. Friend display names.
   const nameRows = await db
     .select({ id: users.id, displayName: users.displayName })
     .from(users)
     .where(inArray(users.id, mutualIds));
   const nameById = new Map(nameRows.map((r) => [r.id, r.displayName]));
 
-  // 5. Build co-correct rows, excluding questions the FRIEND authored.
+  // 6. Build co-correct rows, excluding questions the FRIEND authored and pairs
+  //    whose co-correct moment (the later answer) falls before the window.
   const rows: ConvergenceCoCorrectRow[] = [];
   for (const [key, friendAnsweredAt] of friendByPair) {
     const sep = key.indexOf(PAIR_SEP);
@@ -1029,6 +1056,8 @@ export async function getLatelyConvergences(
     const viewer = viewerByQuestion.get(questionId);
     if (!viewer) continue;
     if (viewer.creatorId === friendId) continue; // friend authored it -> not "shared"
+    const coCorrectAt = Math.max(viewer.answeredAt.getTime(), friendAnsweredAt.getTime());
+    if (coCorrectAt < lookbackStart.getTime()) continue;
     const displayName = nameById.get(friendId) ?? null;
     rows.push({
       friendId,
