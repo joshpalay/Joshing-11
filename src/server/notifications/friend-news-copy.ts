@@ -58,9 +58,20 @@ function invitedLine(news: FriendNews): string | null {
   return `${who} just played ${plural(news.invitedStarted.length, 'a first', 'their first')} five. Your invite worked.`;
 }
 
+// Someone said yes to YOUR request. Otherwise this news only reaches the bell,
+// which some players never open (Sadie → Chiann, 2026-10-09).
+function acceptedLine(news: FriendNews): string | null {
+  const people = news.acceptedYourRequest;
+  if (people.length === 0) return null;
+  return `${joinNames(people.map((p) => p.name))} said yes to your friend ${plural(people.length, 'request', 'requests')}.`;
+}
+
+// New friends not already named by acceptedLine.
 function newFriendsLine(news: FriendNews): string | null {
-  if (news.newFriends.length === 0) return null;
-  return `You and ${joinNames(news.newFriends.map((p) => p.name))} are now friends.`;
+  const accepted = new Set(news.acceptedYourRequest.map((p) => p.friendId));
+  const people = news.newFriends.filter((p) => !accepted.has(p.friendId));
+  if (people.length === 0) return null;
+  return `You and ${joinNames(people.map((p) => p.name))} are now friends.`;
 }
 
 function todaysFiveLine(authors: string[]): string | null {
@@ -72,11 +83,13 @@ function todaysFiveLine(authors: string[]): string | null {
 
 /**
  * The ONE line the daily text may add, or null for the plain reminder. Order is
- * "most personal first": an invite that stuck, then your own questions being
+ * "most personal first": someone saying yes to your friend request (news you
+ * are waiting on), an invite that stuck, then your own questions being
  * answered, then a friend's question waiting today, then a new friend.
  */
 export function smsFriendLine(news: FriendNews, todaysFriendAuthors: string[]): string | null {
   return (
+    acceptedLine(news) ??
     invitedLine(news) ??
     answeredLine(news) ??
     todaysFiveLine(todaysFriendAuthors) ??
@@ -90,6 +103,7 @@ export function dailyEmailFriendLines(
   todaysFriendAuthors: string[],
 ): string[] {
   return [
+    acceptedLine(news),
     invitedLine(news),
     answeredLine(news),
     todaysFiveLine(todaysFriendAuthors),

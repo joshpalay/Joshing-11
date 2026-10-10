@@ -15,6 +15,7 @@ const EMPTY_FRIEND_NEWS: FriendNews = {
   newQuestionsFromFriends: [],
   newFriends: [],
   invitedStarted: [],
+  acceptedYourRequest: [],
 };
 
 function news(partial: Partial<FriendNews>): FriendNews {
@@ -83,6 +84,37 @@ describe('smsFriendLine', () => {
     expect(smsFriendLine(news({ newFriends: [{ friendId: 'm', name: 'Maya' }] }), [])).toBe(
       'You and Maya are now friends.',
     );
+  });
+});
+
+describe('smsFriendLine — someone said yes to your friend request', () => {
+  const chiann = { friendId: 'c', name: 'Chiann' };
+
+  it('leads with it, ahead of every other line', () => {
+    const line = smsFriendLine(
+      news({
+        acceptedYourRequest: [chiann],
+        newFriends: [chiann],
+        invitedStarted: [{ friendId: 'm', name: 'Maya' }],
+        answeredYourQuestions: [{ friendId: 'n', name: 'Neil', total: 2, correct: 1 }],
+      }),
+      ['Ada'],
+    );
+    expect(line).toBe('Chiann said yes to your friend request.');
+  });
+
+  it('pluralizes for several people', () => {
+    expect(
+      smsFriendLine(news({ acceptedYourRequest: [chiann, { friendId: 't', name: 'Tre' }] }), []),
+    ).toBe('Chiann and Tre said yes to your friend requests.');
+  });
+
+  it('never also says "now friends" about the same person in the email', () => {
+    const lines = dailyEmailFriendLines(
+      news({ acceptedYourRequest: [chiann], newFriends: [chiann, { friendId: 'z', name: 'Zed' }] }),
+      [],
+    );
+    expect(lines).toEqual(['Chiann said yes to your friend request.', 'You and Zed are now friends.']);
   });
 });
 

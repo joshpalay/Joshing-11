@@ -4,6 +4,8 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import TodaysFiveCard, { type DailyStatus } from '@/components/TodaysFiveCard'
 import { MissedQuestionsCard } from '@/components/home/MissedQuestionsCard'
 import FriendRequestsSection from '@/components/home/FriendRequestsSection'
+import AcceptedRequestsCard from '@/components/home/AcceptedRequestsCard'
+import { getUnseenAcceptedRequests } from '@/server/db/queries/activity'
 import { LoadingMomentPrimer } from '@/components/loading-moment/LoadingMomentPrimer'
 import { getSession } from '@/server/auth/session'
 import { MutualFriendSuggestionsTeaser } from '@/components/home/MutualFriendSuggestionsTeaser'
@@ -74,6 +76,15 @@ export default async function Home() {
 
       {/* Reminder acquisition lives in onboarding plus one state-gated
           Daily Summary follow-up. Home never repeats the ask. */}
+
+      {/* "Chiann said yes!" — the requester's side of an accepted friend
+          request. Without this the news only reached the bell, which some
+          players never open. Renders nothing when there's no unseen accept. */}
+      {session ? (
+        <Suspense fallback={null}>
+          <AcceptedRequestsHomeSection userId={session.userId} />
+        </Suspense>
+      ) : null}
 
       {/* Pending follow requests — a quiet "Wants to connect" section at the head
           of the social content (below the daily-five + reminder block, above the
@@ -201,6 +212,15 @@ async function TodaysFiveSection({ userId }: { userId: string }) {
       ) : null}
     </>
   )
+}
+
+async function AcceptedRequestsHomeSection({ userId }: { userId: string }) {
+  // Never the reason home fails to render: on error, just skip the card.
+  const notice = await timeServerWork('home/accepted-requests', 'accepted_requests', () =>
+    getUnseenAcceptedRequests(userId),
+  ).catch(() => null)
+  if (!notice || notice.friends.length === 0) return null
+  return <AcceptedRequestsCard notice={notice} />
 }
 
 async function FriendRequestsHomeSection({ userId }: { userId: string }) {

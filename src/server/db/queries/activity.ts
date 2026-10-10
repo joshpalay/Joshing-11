@@ -1170,6 +1170,96 @@ export async function markAllRead(userId: string): Promise<void> {
     .where(and(eq(activityItems.userId, userId), eq(activityItems.read, false)));
 }
 
+// Home "said yes" card: the requester's own news that someone accepted their
+// friend request. The only other place that news lands is the bell, which some
+// players never open (Sadie → Chiann, 2026-10-09: accepted, never seen). Backed
+// by the existing unread `follow_approved` rows, so dismissing the card and
+// opening /activities clear the same state.
+export const ACCEPTED_REQUESTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type AcceptedRequestNotice = {
+  activityIds: string[];
+  friends: { userId: string; name: string }[];
+};
+
+type AcceptedRequestRow = {
+  id: string;
+  actorUserId: string | null;
+  createdAt: Date;
+  actorDisplayName: string | null;
+};
+
+// Pure selection, exported for tests: one entry per accepter (newest first),
+// only while they are still a mutual friend and not blocked either way. Every
+// row id is kept for dismissal, including repeats for the same person.
+export function selectAcceptedRequestNotice(
+  rows: AcceptedRequestRow[],
+  blockedIds: ReadonlySet<string>,
+  currentFriendIds: ReadonlySet<string>,
+): AcceptedRequestNotice {
+  const live = rows.filter(
+    (row): row is AcceptedRequestRow & { actorUserId: string } =>
+      row.actorUserId !== null && !blockedIds.has(row.actorUserId) && currentFriendIds.has(row.actorUserId),
+  );
+  const sorted = [...live].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const seen = new Set<string>();
+  const friends: AcceptedRequestNotice['friends'] = [];
+  for (const row of sorted) {
+    if (seen.has(row.actorUserId)) continue;
+    seen.add(row.actorUserId);
+    friends.push({ userId: row.actorUserId, name: displayName(row.actorDisplayName, 'Your friend') });
+  }
+  return { activityIds: live.map((row) => row.id), friends };
+}
+
+export async function getUnseenAcceptedRequests(
+  userId: string,
+  now: Date = new Date(),
+): Promise<AcceptedRequestNotice> {
+  const rows = await db
+    .select({
+      id: activityItems.id,
+      actorUserId: activityItems.actorUserId,
+      createdAt: activityItems.createdAt,
+      actorDisplayName: users.displayName,
+    })
+    .from(activityItems)
+    .leftJoin(users, eq(users.id, activityItems.actorUserId))
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        eq(activityItems.type, 'follow_approved'),
+        eq(activityItems.read, false),
+        isNull(activityItems.deletedAt),
+        gt(activityItems.createdAt, new Date(now.getTime() - ACCEPTED_REQUESTS_WINDOW_MS)),
+      ),
+    );
+  if (rows.length === 0) return { activityIds: [], friends: [] };
+
+  const actorIds = [...new Set(rows.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
+  const [blockedIds, currentFriendIds] = await Promise.all([
+    blockedIdsAmong(userId, actorIds),
+    mutualFriendIdsAmong(userId, actorIds),
+  ]);
+  return selectAcceptedRequestNotice(rows, blockedIds, currentFriendIds);
+}
+
+// Marks only the viewer's own `follow_approved` rows read — the ids come from
+// the client, so they're scoped by owner and type, never trusted alone.
+export async function dismissAcceptedRequests(userId: string, activityIds: string[]): Promise<void> {
+  if (activityIds.length === 0) return;
+  await db
+    .update(activityItems)
+    .set({ read: true })
+    .where(
+      and(
+        eq(activityItems.userId, userId),
+        eq(activityItems.type, 'follow_approved'),
+        inArray(activityItems.id, activityIds),
+      ),
+    );
+}
+
 export async function markActivityBellOpened(userId: string): Promise<void> {
   await db
     .update(users)
