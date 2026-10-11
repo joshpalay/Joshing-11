@@ -181,6 +181,20 @@ describe('composeMutualFriendSuggestions', () => {
     expect(result.map((r) => r.id)).not.toContain('high')
   })
 
+  it('(c) excludes a candidate whose request the requester declined (QA 2026-10-11, S2)', () => {
+    // resolve() reads a declined inbound request as 'none', so the state alone
+    // would put the declined person straight back into "People you may know".
+    const result = composeMutualFriendSuggestions({
+      requesterOptedIn: true,
+      candidateRows: baseCandidateRows,
+      relationships: noRelationships,
+      candidateUsers: baseCandidateUsers,
+      declinedByRequester: new Set(['high']),
+      limit: 10,
+    })
+    expect(result.map((r) => r.id).sort()).toEqual(['low', 'mid'])
+  })
+
   it('(c) treats a candidate with NO relationship row at all as a clean stranger', () => {
     // relationships map has no entry for any of these ids -- getRelationships
     // only populates entries it found an edge for.
@@ -329,6 +343,27 @@ describe('getMutualFriendSuggestions (DB wiring)', () => {
       { id: 'cand-high', displayName: 'Cand High', mutualFriendCount: 2 },
       { id: 'cand-low', displayName: 'Cand Low', mutualFriendCount: 1 },
     ])
+  })
+
+  it('drops a candidate whose request the requester declined (declined-edge query)', async () => {
+    state.selectQueue = [
+      [{ discoverableByMutualFriends: true }],
+      [{ user: { id: 'friend-a', displayName: 'Friend A', phoneNumber: '+1' } }],
+      [],
+      [
+        { candidateId: 'cand-low', mutualFriendCount: 1 },
+        { candidateId: 'cand-high', mutualFriendCount: 2 },
+      ],
+      [
+        { id: 'cand-low', displayName: 'Cand Low', handle: 'cand_low', discoverableByMutualFriends: true },
+        { id: 'cand-high', displayName: 'Cand High', handle: 'cand_high', discoverableByMutualFriends: true },
+      ],
+      [{ id: 'cand-high' }], // cand-high's request to the requester was declined
+    ]
+
+    const result = await getMutualFriendSuggestions('requester-1', 10)
+
+    expect(result).toEqual([{ id: 'cand-low', displayName: 'Cand Low', mutualFriendCount: 1 }])
   })
 
   it('short-circuits after the FoF query when there are zero candidates', async () => {

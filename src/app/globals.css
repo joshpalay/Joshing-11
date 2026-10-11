@@ -74,7 +74,7 @@
     --brand-ink:         #0a1f3d;  /* ink/900 — primary text / headings        */
     --brand-ink-950:     #091729;  /* ink/950 — JOSHING wordmark (Figma fill)  */
     --brand-ink-700:     #3a4a5f;  /* ink/700 — secondary text                 */
-    --brand-ink-400:     #8a8a8a;  /* ink/400 — muted / timestamps             */
+    --brand-ink-400:     #6b6b6b;  /* ink/400 — muted / timestamps. Was #8a8a8a (3.3:1 on the page, under AA); 5.0:1 page / 5.2:1 card (QA 2026-10-11, S3) */
     --brand-navy:        #1f3a5a;  /* navy/500 — wordmark, primary buttons     */
     --brand-link:        #4a5d75;  /* Link — inline links                      */
     /* Unified fill behind primary buttons — both .btn-primary and the login submit
@@ -291,7 +291,7 @@
     --cream-accent:    var(--brand-cream);       /* #f8e6c7 highlight/accent */
     --border-warm:     var(--brand-border);      /* #e9e2d2 warm border */
     --border-light:    #eee7d8;                  /* lighter inner border */
-    --text-muted-warm: var(--brand-ink-400);     /* #8a8a8a muted text */
+    --text-muted-warm: var(--brand-ink-400);     /* #6b6b6b muted text */
     /* Warm-brown ink ramp — the Knowledge/Portrait surface intentionally uses a
        warmer ink than the navy --brand-ink. These were raw hex (#1a1208/#8a8070/
        #696257/#e8e2d6/…) scattered inline across the knowledge components; the

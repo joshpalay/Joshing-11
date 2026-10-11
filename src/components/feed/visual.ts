@@ -26,7 +26,7 @@ export const AVATAR_COLORS = [
 
 export type AvatarColor = (typeof AVATAR_COLORS)[number]
 
-const FALLBACK_MUTED = '#8a8a8a' // raw hex required: callers pass this through isDarkColor(); mirrors --brand-ink-400
+const FALLBACK_MUTED = '#8a8a8a' // raw hex required: callers pass this through isDarkColor(). An accent/avatar fill, not text: kept at the old ink/400 when that token darkened for text contrast (QA 2026-10-11, S3)
 
 function hashString(str: string): number {
   return Array.from(str).reduce((sum, char) => sum + char.charCodeAt(0), 0)

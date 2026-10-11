@@ -39,6 +39,7 @@ import { DAILY_QUEUE_SIZE, type QueueSlot } from '@/server/daily/types';
 import { stripInlineMarkdown } from '@/lib/plain-text';
 import { getLiveCoreSlots, getSlotPresence, isAdditiveSlot, isBonusSlot } from '@/server/daily/bonus';
 import { scrubBlockedPresence } from '@/server/daily/scrub-blocked-presence';
+import { recapReveal } from '@/server/daily/recap-reveal';
 import type { RefineSectionView } from '@/server/refine/types';
 import type { MasteryTier } from '@/types/db';
 import { shouldOfferReminderAcquisition } from '@/server/reminders/acquisition';
@@ -116,9 +117,16 @@ export type QuestionRecap = {
   bankQuestionId: string | null;
   questionText: string;
   submittedAnswer: string | null;
+  /** Empty until the slot is answered (recapReveal): never a spoiler for a waiting question. */
   correctAnswer: string;
   isCorrect: boolean;
   isSkipped: boolean;
+  /**
+   * Still to play: neither answered nor skipped. The recap shows these as
+   * "Still to play" with no answer, and leaves them out of every count
+   * (QA 2026-10-11, C1).
+   */
+  isPending: boolean;
   /**
    * Why a skipped slot closed, when the recap can tell: 'hidden' (Never show
    * this question — a HiddenQuestion row) or 'rested' (not my bag / Rest — the
@@ -368,14 +376,20 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
     const presence = getSlotPresence(slot);
     const domain = slot.domain || generated?.canonicalSubcategory || 'General';
     const questionId = slot.question_id ?? slot.generated_question_id ?? `${queue?.id ?? dateString}:${slot.slot_index}`;
+    const reveal = recapReveal(
+      slot,
+      slot.reveal_canonical_answer ?? generated?.answer ?? '',
+      stripInlineMarkdown(slot.reveal_explainer ?? generated?.explainer ?? ''),
+    );
     return {
       questionId,
       bankQuestionId: slot.question_id ?? null,
       questionText: slot.question_text || generated?.questionText || '',
       submittedAnswer: slot.submitted_answer ?? null,
-      correctAnswer: slot.reveal_canonical_answer ?? generated?.answer ?? '',
+      correctAnswer: reveal.correctAnswer,
       isCorrect: slot.answer_state === 'correct',
       isSkipped: Boolean(slot.skipped),
+      isPending: reveal.isPending,
       skipReason: !slot.skipped
         ? null
         : (slot.question_id && neverShowIds.has(slot.question_id)) ||
@@ -384,7 +398,7 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
           : restingDomains.has(domain.toLowerCase())
             ? 'rested'
             : null,
-      explanation: stripInlineMarkdown(slot.reveal_explainer ?? generated?.explainer ?? ''),
+      explanation: reveal.explanation,
       domain,
       domainDisplayName: displayNameForDomain(domain),
       isInBank: slot.question_id ? Boolean(bankedById[slot.question_id]) : false,

@@ -160,6 +160,8 @@ export type ChatMessage =
       pointsAwarded?: number | null;
       pointsLabel?: string | null;
       recheckAction?: RecheckAction | null;
+      /** Stored verdict of an appeal that didn't flip the grade (recheckVerdictText). */
+      recheckVerdict?: string | null;
       /** Content-report target for the result card's ⋯ menu (see question variant). */
       reportTarget?: ReportReasonTarget | null;
     }
@@ -1345,6 +1347,7 @@ function ResultRow({
   pointsAwarded,
   pointsLabel,
   recheckAction,
+  recheckVerdict = null,
   canonicalSubcategory,
   openedTerritoryDomain,
   openedTerritoryAdopted = true,
@@ -1372,6 +1375,7 @@ function ResultRow({
   pointsAwarded?: number | null;
   pointsLabel?: string | null;
   recheckAction?: RecheckAction | null;
+  recheckVerdict?: string | null;
   openedTerritoryDomain?: string | null;
   openedTerritoryAdopted?: boolean;
   reportTarget?: ReportReasonTarget | null;
@@ -1592,8 +1596,12 @@ function ResultRow({
                 {consolation}
               </p>
             ) : null}
-            {recheckAction ? (
+            {/* The verdict outlives the button: once an appeal is answered the
+                slot carries recheck_status, recheckAction goes null, and this
+                block used to vanish with the "no" still unread (QA 2026-10-11, S1). */}
+            {recheckAction || recheckMessage || recheckVerdict ? (
               <div style={{ marginTop: '10px' }}>
+                {recheckAction ? (
                 <button
                   type="button"
                   onClick={() => setArgueOpen(true)}
@@ -1622,8 +1630,9 @@ function ResultRow({
                 >
                   Argue your point
                 </button>
-                {recheckMessage ? (
-                  recheckAccepted ? (
+                ) : null}
+                {recheckMessage || recheckVerdict ? (
+                  recheckAccepted && recheckMessage ? (
                     <RecheckAcceptedNote message={recheckMessage} />
                   ) : (
                     <p
@@ -1636,7 +1645,7 @@ function ResultRow({
                         lineHeight: 1.35,
                       }}
                     >
-                      {recheckMessage}
+                      {recheckMessage ?? recheckVerdict}
                     </p>
                   )
                 ) : null}
@@ -1651,7 +1660,10 @@ function ResultRow({
         {correct && recheckAccepted && recheckMessage ? (
           <RecheckAcceptedNote message={recheckMessage} />
         ) : null}
-        {argueOpen && recheckAction ? (
+        {/* Not gated on recheckAction: the submit itself nulls it, which used to
+            unmount the sheet before it could show a rejected verdict (QA
+            2026-10-11, S1). The sheet only calls onSubmit from its form. */}
+        {argueOpen ? (
           <ArguePointSheet
             question={questionText}
             submittedAnswer={submitted}
@@ -1969,6 +1981,7 @@ export function GameplayChatThread({
                 pointsAwarded={m.pointsAwarded}
                 pointsLabel={m.pointsLabel}
                 recheckAction={m.recheckAction}
+                recheckVerdict={m.recheckVerdict}
                 openedTerritoryDomain={m.openedTerritoryDomain}
                 openedTerritoryAdopted={m.openedTerritoryAdopted}
                 reportTarget={m.reportTarget}

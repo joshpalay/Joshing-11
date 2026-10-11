@@ -77,7 +77,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="inline-flex items-center min-h-11 text-muted-foreground/70 hover:text-muted-foreground mt-3 text-xs underline-offset-4 hover:underline"
+      className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground mt-3 text-xs underline-offset-4 hover:underline"
     >
       Block
     </button>

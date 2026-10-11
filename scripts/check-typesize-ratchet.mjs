@@ -27,7 +27,9 @@ import { join, relative } from 'node:path';
 // arbitraries as a side effect (the R10 floor work rewrote the class strings
 // that carried them). A ratchet only ratchets if the ceiling follows the
 // count down, so this closes the slack rather than banking it.
-const CEILING = 207;
+// Lowered 207 → 205 on 2026-10-11: the 16px input sweep (QA 2026-10-11, S5)
+// replaced the report sheet's two text-[15px] fields with text-base.
+const CEILING = 205;
 
 // ── Exemptions (mirrors the color ratchet; keep this list short) ────────────
 const EXEMPT = [

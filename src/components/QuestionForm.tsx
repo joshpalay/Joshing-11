@@ -1073,7 +1073,7 @@ export function QuestionForm({
                           value={state.friendSearch}
                           onChange={(event) => dispatch({ type: 'FRIEND_SEARCH', value: event.target.value })}
                           placeholder="Search friends..."
-                          className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-9 pr-3 text-sm focus:border-[var(--brand-navy)]"
+                          className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-9 pr-3 text-base focus:border-[var(--brand-navy)]"
                           disabled={state.stage === 'SUBMITTING'}
                         />
                       </label>

@@ -229,7 +229,7 @@ export default function ArchivePage() {
           <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
             Source
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-base normal-case tracking-normal text-foreground"
               value={source}
               onChange={(event) => setSource(event.target.value as ArchiveSource | '')}
             >
@@ -241,7 +241,7 @@ export default function ArchivePage() {
           <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
             Domain
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-base normal-case tracking-normal text-foreground"
               value={domain}
               onChange={(event) => setDomain(event.target.value)}
             >
@@ -254,7 +254,7 @@ export default function ArchivePage() {
           <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
             Result
             <select
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm normal-case tracking-normal text-foreground"
+              className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-base normal-case tracking-normal text-foreground"
               value={result}
               onChange={(event) => setResult(event.target.value as ArchiveResult | '')}
             >
@@ -278,7 +278,7 @@ export default function ArchivePage() {
         <label className="relative mt-3 block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
-            className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm focus:border-[var(--brand-navy)]"
+            className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-base focus:border-[var(--brand-navy)]"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search questions..."

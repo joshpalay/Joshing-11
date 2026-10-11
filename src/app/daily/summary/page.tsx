@@ -210,6 +210,10 @@ export default function DailySummaryPage() {
   const coreQuestions = summary.questions.filter((q) => !q.isAdditive)
   const coreCorrect = coreQuestions.filter((q) => q.isCorrect).length
   const coreTotal = coreQuestions.length
+  // The app only links here once the round is done, but a bookmark, the back
+  // button or a stale tab can land here mid-round (QA 2026-10-11, C1). Then the
+  // header talks about the round in progress and the share score waits.
+  const stillToPlay = summary.questions.filter((q) => q.isPending).length
 
   // Questions from friends still waiting across the "For You"/"To You" surfaces —
   // powers the quiet nudge in the sticky footer. 0 hides the line entirely.
@@ -247,14 +251,29 @@ export default function DailySummaryPage() {
               <h1 className="font-serif text-[2.75rem] leading-[0.95] tracking-[-0.03em] text-[var(--brand-ink)] sm:text-5xl">
                 Today&rsquo;s Five
               </h1>
-              <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
-                You found common ground in {headerDomain} and opened a few new
-                edges of the map.
-              </p>
+              {stillToPlay > 0 ? (
+                <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
+                  {stillToPlay === 1 ? 'One question is' : `${stillToPlay} questions are`} still
+                  waiting.{' '}
+                  <Link
+                    href="/daily"
+                    className="font-medium text-[var(--brand-link)] underline underline-offset-4"
+                  >
+                    Back to the round →
+                  </Link>
+                </p>
+              ) : (
+                <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
+                  You found common ground in {headerDomain} and opened a few new
+                  edges of the map.
+                </p>
+              )}
             </div>
-            <div className="shrink-0 pt-1">
-              <ShareResultsButton correct={coreCorrect} total={coreTotal} />
-            </div>
+            {stillToPlay > 0 ? null : (
+              <div className="shrink-0 pt-1">
+                <ShareResultsButton correct={coreCorrect} total={coreTotal} />
+              </div>
+            )}
           </div>
           <div className="mt-5">
             <ResultDots questions={summary.questions} />
@@ -299,7 +318,10 @@ export default function DailySummaryPage() {
           <div className="space-y-4">
             {summary.questions
               .filter((question) => !hiddenQuestionIds.has(question.questionId))
-              .map((question) => (
+              .map((question) =>
+                question.isPending ? (
+                  <PendingQuestionCard key={question.questionId} question={question} />
+                ) : (
                 <QuestionCard
                   key={question.questionId}
                   question={question}
@@ -311,7 +333,8 @@ export default function DailySummaryPage() {
                     })
                   }
                 />
-              ))}
+                )
+              )}
           </div>
         </section>
 
@@ -412,7 +435,7 @@ function interpretiveLine(summary: DailySummaryView): string | null {
   const newDomain = summary.domainGains.find((gain) => gain.isNewTerritory)
   if (newDomain) return `You found new ground in ${newDomain.displayName}.`
 
-  const answered = summary.questions.filter((q) => !q.isSkipped)
+  const answered = summary.questions.filter((q) => !q.isSkipped && !q.isPending)
 
   // 3 & 4 are the "perfect/whiffed five" beats — gated on the CORE five (D-F3:
   // bonus is additive and never enters the count), so they fire on a clean or
@@ -487,7 +510,9 @@ function ResultDot({
     <span
       className="size-2.5 rounded-full border"
       style={{
-        backgroundColor: question.isSkipped
+        backgroundColor: question.isPending
+          ? 'transparent'
+          : question.isSkipped
           ? 'color-mix(in srgb, var(--brand-ink) 24%, transparent)'
           : question.isCorrect
             ? 'color-mix(in srgb, var(--game-correct) 88%, var(--brand-card))'
@@ -512,7 +537,13 @@ function ResultDots({ questions }: { questions: QuestionRecap[] }) {
   const bonus = questions.filter((q) => q.trackDot === 'bonus')
 
   const outcome = (q: QuestionRecap) =>
-    q.isSkipped ? 'skipped' : q.isCorrect ? 'correct' : 'not this time'
+    q.isPending
+      ? 'still to play'
+      : q.isSkipped
+        ? 'skipped'
+        : q.isCorrect
+          ? 'correct'
+          : 'not this time'
 
   return (
     <div className="flex items-center gap-2" aria-label="Question results">
@@ -607,6 +638,31 @@ function InterpretiveLine({ text }: { text: string }) {
   )
 }
 
+
+// A question the player hasn't reached yet (QA 2026-10-11, C1). No answer
+// block, no explainer and no Share: the server sends no answer for it, and a
+// question you haven't played isn't yours to send on. Just the way back.
+function PendingQuestionCard({ question }: { question: QuestionRecap }) {
+  return (
+    <article className="relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] p-5 shadow-none">
+      <div className="flex flex-wrap items-center gap-2 pl-1">
+        <Chip variant="outline">
+          Still to play
+        </Chip>
+        <p className="text-xs leading-5 text-muted-foreground">{question.domainDisplayName}</p>
+      </div>
+      <p className="mt-4 pl-1 text-lg leading-7 font-medium tracking-[-0.01em] text-[var(--brand-ink)]">
+        {question.questionText}
+      </p>
+      <Link
+        href="/daily"
+        className="mt-3 ml-1 inline-flex min-h-11 items-center text-sm font-medium text-[var(--brand-link)] underline underline-offset-4"
+      >
+        Play it →
+      </Link>
+    </article>
+  )
+}
 
 function QuestionCard({ question, onHide }: { question: QuestionRecap; onHide: () => void }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
