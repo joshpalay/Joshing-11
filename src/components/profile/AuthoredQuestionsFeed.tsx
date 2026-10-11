@@ -385,7 +385,7 @@ export function AuthoredQuestionsFeed({
             <label className="relative block">
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <input
-                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-md border border-[var(--accent-gold)] pr-3 pl-10 text-sm"
+                className="bg-[var(--brand-field)] focus:border-[var(--brand-navy)] h-11 w-full rounded-md border border-[var(--accent-gold)] pr-3 pl-10 text-base"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search questions..."
@@ -398,7 +398,7 @@ export function AuthoredQuestionsFeed({
               <div className="flex flex-wrap gap-2">
                 {showAnsweredFilter ? (
                   <select
-                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    className="bg-background text-foreground h-11 flex-1 rounded-md border px-3 text-base"
                     value={selectedAnswered}
                     onChange={(event) =>
                       setSelectedAnswered(
@@ -414,7 +414,7 @@ export function AuthoredQuestionsFeed({
                 ) : null}
                 {categoryOptions.length > 1 ? (
                   <select
-                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    className="bg-background text-foreground h-11 flex-1 rounded-md border px-3 text-base"
                     value={selectedCategory}
                     onChange={(event) => setSelectedCategory(event.target.value)}
                     aria-label="Filter by category"
@@ -429,7 +429,7 @@ export function AuthoredQuestionsFeed({
                 ) : null}
                 {difficultyOptions.length > 1 ? (
                   <select
-                    className="bg-background text-foreground h-10 flex-1 rounded-md border px-3 text-sm"
+                    className="bg-background text-foreground h-11 flex-1 rounded-md border px-3 text-base"
                     value={selectedDifficulty}
                     onChange={(event) => setSelectedDifficulty(event.target.value)}
                     aria-label="Filter by difficulty"

@@ -487,7 +487,7 @@ export default function FriendsList() {
                   <select
                     value={friendSort}
                     onChange={(event) => setFriendSort(event.target.value as FriendSort)}
-                    className="focus-visible:border-primary focus-visible:ring-primary h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="focus-visible:border-primary focus-visible:ring-primary h-11 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-base outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                     aria-label="Sort by"
                   >
                     <option value="name_asc">Name (A–Z)</option>
@@ -505,7 +505,7 @@ export default function FriendsList() {
                     value={friendSearch}
                     onChange={(event) => setFriendSearch(event.target.value)}
                     placeholder="Filter by name or topic"
-                    className="focus:border-[var(--brand-navy)] border-border bg-background h-10 w-full rounded-md border pr-3 pl-10 text-sm"
+                    className="focus:border-[var(--brand-navy)] border-border bg-background h-11 w-full rounded-md border pr-3 pl-10 text-base"
                   />
                 </label>
               </div>

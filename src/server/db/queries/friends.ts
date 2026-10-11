@@ -645,15 +645,27 @@ const MUTUAL_SUGGESTION_CANDIDATE_SCAN_LIMIT = 200
  * (see notifyNicheMatch / discovery-attribution.ts) -- both parties are
  * gating the SAME direction of exposure here (both would see each other as
  * a suggestion), so there's no asymmetric split to preserve.
+ *
+ * Declined rule: someone whose request the requester DECLINED is never
+ * suggested back to them. resolve() deliberately reads a declined inbound
+ * request as 'none' (the decline must stay invisible to the sender, and the
+ * decliner can still reach out later), so the 'none' rule alone put the
+ * declined person straight back into "People you may know" -- pestering the
+ * decliner with the very person they just said no to (QA 2026-10-11, S2).
+ * The sender's side needs no rule: their declined request still reads as
+ * pending to them, which the 'none' rule already excludes.
  */
 export function composeMutualFriendSuggestions(params: {
   requesterOptedIn: boolean
   candidateRows: MutualFriendCandidateRow[]
   relationships: Map<string, RelationshipResult>
   candidateUsers: MutualFriendCandidateUserRow[]
+  /** Candidates whose friend request to the requester the requester declined. */
+  declinedByRequester?: Set<string>
   limit: number
 }): MutualFriendSuggestion[] {
   const { requesterOptedIn, candidateRows, relationships, candidateUsers, limit } = params
+  const declinedByRequester = params.declinedByRequester ?? new Set<string>()
   if (!requesterOptedIn || limit <= 0) return []
 
   const countById = new Map(candidateRows.map((row) => [row.candidateId, row.mutualFriendCount]))
@@ -669,6 +681,7 @@ export function composeMutualFriendSuggestions(params: {
       const state = relationship?.state ?? 'none'
       const blocked = relationship?.isBlocked ?? false
       if (state !== 'none' || blocked) return false
+      if (declinedByRequester.has(id)) return false
 
       const candidate = candidateById.get(id)
       // No profile row (e.g. deleted account) or opted-out candidate: never
@@ -767,7 +780,7 @@ export async function getMutualFriendSuggestions(
   // Relationship/block exclusions and candidate profile+opt-in, batched --
   // one call each regardless of candidate count (getRelationships batches
   // internally too, see friend-requests.ts).
-  const [relationships, candidateUsers] = await Promise.all([
+  const [relationships, candidateUsers, declinedRows] = await Promise.all([
     getRelationships(userId, candidateIds),
     db
       .select({
@@ -778,6 +791,18 @@ export async function getMutualFriendSuggestions(
       })
       .from(users)
       .where(inArray(users.id, candidateIds)),
+    // Requests from these candidates that the requester declined (see the
+    // Declined rule on composeMutualFriendSuggestions).
+    db
+      .select({ id: follows.followerId })
+      .from(follows)
+      .where(
+        and(
+          eq(follows.followeeId, userId),
+          inArray(follows.followerId, candidateIds),
+          eq(follows.state, 'declined'),
+        ),
+      ),
   ])
 
   return composeMutualFriendSuggestions({
@@ -785,6 +810,7 @@ export async function getMutualFriendSuggestions(
     candidateRows,
     relationships,
     candidateUsers,
+    declinedByRequester: new Set(declinedRows.map((row) => row.id)),
     limit,
   })
 }

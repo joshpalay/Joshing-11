@@ -159,7 +159,7 @@ export function CreationSurface({
           id="tier-select"
           value={tier}
           onChange={(e) => setTier(e.target.value as DraftTier)}
-          className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ borderColor: 'var(--border)' }}
         >
           <option value="deep">deep cuts (only a real fan knows)</option>
@@ -187,7 +187,7 @@ export function CreationSurface({
             id="attribution-select"
             value={attribution}
             onChange={(e) => setAttribution(e.target.value as KeepAttribution)}
-            className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             style={{ borderColor: 'var(--border)' }}
           >
             <option value="self">{ATTRIBUTION_LABEL.self}</option>
@@ -591,7 +591,7 @@ function OwnQuestionCard({
         <select
           value={difficulty}
           onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
-          className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-sm"
+          className="min-h-11 rounded-md border bg-[var(--brand-field)] px-2 py-1.5 text-base"
           style={{ borderColor: 'var(--border)' }}
           aria-label="Difficulty"
         >

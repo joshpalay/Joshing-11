@@ -426,7 +426,7 @@ export function NotificationsForm({ initialState, phone }: Props) {
                 setEmailDraft(event.target.value);
                 setEmailError(null);
               }}
-              className="flex-1 rounded-lg border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-sm focus:border-[var(--brand-navy)]"
+              className="flex-1 rounded-lg border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 py-2 text-base focus:border-[var(--brand-navy)]"
             />
             <button
               type="button"

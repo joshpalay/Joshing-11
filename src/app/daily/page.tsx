@@ -30,6 +30,8 @@ import {
   appendRecheckQuotaNote,
   DISPUTED_RECHECK_FALLBACK_MESSAGE,
   NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
+  recheckVerdictText,
+  REJECTED_RECHECK_FALLBACK_MESSAGE,
 } from '@/lib/recheck-copy';
 import { slotCategoryLabel } from '@/server/daily/slot-label';
 import { DAILY_QUEUE_SIZE, hasPendingSlot, type QueueSlot } from '@/server/daily/types';
@@ -695,7 +697,7 @@ export default function DailyPage() {
       return {
         accepted: false,
         status,
-        message: appendRecheckQuotaNote(reason ?? 'Rechecked and still marked wrong.', rechecksRemaining),
+        message: appendRecheckQuotaNote(reason ?? REJECTED_RECHECK_FALLBACK_MESSAGE, rechecksRemaining),
       };
     },
     [queue],
@@ -792,6 +794,10 @@ export default function DailyPage() {
             slot.answer_state === 'incorrect' && !gaveUp && !slot.recheck_status
               ? { onSubmit: (argument) => requestRecheck(slot.slot_index, argument) }
               : null,
+          // The answer to an appeal that didn't flip the grade, so the card keeps
+          // saying why once the button is gone, including after a reload
+          // (QA 2026-10-11, S1).
+          recheckVerdict: recheckVerdictText(slot.recheck_status, slot.recheck_reason),
           reportTarget: reportTargetFor(slot),
         });
         continue;

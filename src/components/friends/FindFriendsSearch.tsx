@@ -166,7 +166,7 @@ export function FindFriendsSearch() {
           }
         }}
         placeholder="@username or US phone number"
-        className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground placeholder:text-muted-foreground mt-3 h-11 w-full rounded-md border px-3 text-sm outline-none focus:border-[var(--brand-navy)] focus-visible:ring-2 focus-visible:ring-ring"
+        className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground placeholder:text-muted-foreground mt-3 h-11 w-full rounded-md border px-3 text-base outline-none focus:border-[var(--brand-navy)] focus-visible:ring-2 focus-visible:ring-ring"
       />
 
       <div className="mt-3 min-h-[44px]" aria-live="polite" aria-busy={searching}>

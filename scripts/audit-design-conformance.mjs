@@ -88,7 +88,8 @@ const BASELINE = {
   // inner span, EditorialPromos grew an ::after hit area. InlineAnswerFlow is
   // still counted because its 44px is an inline style the regex cannot read.
   // This number is a TREND LINE, not a rule to close at 0: see §9.1.
-  R10: 73,
+  // 73 → 72 on 2026-10-11: the QA 2026-10-11 fixes (S1/S5) removed one site.
+  R10: 72,
 };
 
 // ── Exemptions (mirrors the ratchets; plus the canon's named surfaces) ───────

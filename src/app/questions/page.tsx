@@ -484,7 +484,7 @@ function QuestionsPageContent() {
               <select
                 value={orderMode}
                 onChange={(event) => setOrderMode(event.target.value as OrderMode)}
-                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="h-11 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-base outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 aria-label="Order by"
               >
                 <option value="recency">By recency</option>
@@ -496,7 +496,7 @@ function QuestionsPageContent() {
               <select
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="h-10 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="h-11 w-full appearance-none rounded-md border bg-background px-3 pr-9 text-base outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 aria-label="Sort by"
               >
                 <option value="newest">Newest</option>
@@ -512,7 +512,7 @@ function QuestionsPageContent() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search questions..."
-                className="h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-sm focus:border-[var(--brand-navy)]"
+                className="h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] pl-10 pr-3 text-base focus:border-[var(--brand-navy)]"
               />
             </label>
           </section>

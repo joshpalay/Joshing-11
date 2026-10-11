@@ -477,7 +477,7 @@ function ControlsBar({
         onChange={(event) => onSearch(event.target.value)}
         placeholder="Search your areas…"
         aria-label="Search areas"
-        className="min-h-9 w-full rounded-[var(--radius-xs)] border px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 w-full rounded-[var(--radius-xs)] border px-4 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         style={{ borderColor: 'var(--border)', background: 'var(--brand-card)', color: 'var(--brand-ink)' }}
       />
 

@@ -526,7 +526,7 @@ export function AccountActions({
                   setDeleteConfirmation(event.target.value);
                   setDeleteError(null);
                 }}
-                className="focus:border-destructive mt-1 h-10 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-sm"
+                className="focus:border-destructive mt-1 h-11 w-full rounded-md border border-[var(--accent-gold)] bg-[var(--brand-field)] px-3 text-base"
                 autoComplete="off"
                 disabled={deletingAccount}
               />

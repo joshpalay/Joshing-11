@@ -23,6 +23,25 @@ export const DISPUTED_RECHECK_FALLBACK_MESSAGE =
 export const NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE =
   'You might be onto something. A person will take a look.'
 
+// Default copy for a plain 'rejected' recheck when the reviewer's reason is missing.
+export const REJECTED_RECHECK_FALLBACK_MESSAGE = 'Rechecked and still marked wrong.'
+
+// The verdict line for a recheck that did NOT flip the answer, rebuilt from the
+// stored slot fields. A rejected appeal used to leave the round card with no
+// word at all once the sheet closed, or after a reload (QA 2026-10-11, S1).
+// Null when there was no recheck, or when it was accepted (the card is then
+// correct and says so itself).
+export function recheckVerdictText(
+  status: 'accepted' | 'rejected' | 'needs_human' | 'disputed' | null | undefined,
+  reason: string | null | undefined,
+): string | null {
+  if (!status || status === 'accepted') return null
+  if (reason) return reason
+  if (status === 'disputed') return DISPUTED_RECHECK_FALLBACK_MESSAGE
+  if (status === 'needs_human') return NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE
+  return REJECTED_RECHECK_FALLBACK_MESSAGE
+}
+
 // "Argue your point" (B-ARGUE-01): the optional written-case textarea's hard
 // cap, enforced client-side (the counter + maxLength) and re-checked server
 // side in every recheck route so it can't be bypassed by calling the API

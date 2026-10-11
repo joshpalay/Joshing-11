@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 const MAX_NOTE_LENGTH = 160
 const COUNTER_VISIBLE_AT = 120
@@ -65,6 +65,9 @@ export function AddFriendRequestModal({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // The note's label is the sentence above it; without this the box was named
+  // only by its placeholder (QA 2026-10-11, S5).
+  const noteLabelId = useId()
 
   useEffect(() => {
     textareaRef.current?.focus()
@@ -168,18 +171,19 @@ export function AddFriendRequestModal({
             ×
           </button>
         </div>
-        <p className="text-muted-foreground mb-4 text-sm">
+        <p id={noteLabelId} className="text-muted-foreground mb-4 text-sm">
           Add a short note (optional) — they’ll see it with the request.
         </p>
         <textarea
           ref={textareaRef}
+          aria-labelledby={noteLabelId}
           value={note}
           onChange={(event) => setNote(event.target.value.slice(0, MAX_NOTE_LENGTH))}
           maxLength={MAX_NOTE_LENGTH}
           rows={4}
           placeholder="Hey — I keep meaning to ask you about that thing…"
           disabled={sending}
-          className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground placeholder:text-muted-foreground w-full resize-none rounded-lg border p-3 text-sm focus:border-[var(--brand-navy)]"
+          className="border-[var(--accent-gold)] bg-[var(--brand-field)] text-foreground placeholder:text-muted-foreground w-full resize-none rounded-lg border p-3 text-base focus:border-[var(--brand-navy)]"
         />
         <div className="mt-1 flex h-5 items-center justify-end">
           {counterVisible ? (
