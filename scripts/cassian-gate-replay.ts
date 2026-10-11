@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import dotenv from 'dotenv';
-import { validateManifest, schedule, scoreGate, type GateManifest } from './cassian-gate-core';
+import { validateManifest, schedule, scoreGate, modelForStep, type GateManifest } from './cassian-gate-core';
 import { estimateCostUsd } from '../src/server/llm/pricing';
 import { acquireRunnerLock, closeBudgetPool, getBudgetStatus, reserveCall, settleCall } from '../src/server/cassian/budget';
 
@@ -20,13 +20,14 @@ async function main(): Promise<void> {
   if (!Number.isInteger(limit) || limit < 1 || limit > steps.length) throw new Error('Invalid call limit.');
   const paid = process.argv.includes('--run') || process.argv.includes('--resume');
   if (!paid) {
-    const estimate = steps.reduce((sum, s) => sum + (estimateCostUsd(manifest.models[s.case.gate], {
+    const estimate = steps.reduce((sum, s) => sum + (estimateCostUsd(modelForStep(manifest, s.case.gate, s.arm), {
       inputTokens: Math.ceil((manifest.prompts[s.case.gate][s.arm].length + s.case.body.length) / 3.5),
       outputTokens: s.case.gate === 'quality' ? 160 : 240,
       cacheReadTokens: 0, cacheCreateTokens: 0,
     }).usd ?? Infinity), 0);
     console.log(JSON.stringify({ runId: manifest.id, cases: manifest.cases.length, calls: steps.length,
-      selectedCalls: limit, estimatedUsd: estimate, runCapUsd: manifest.maxRunUsd, paidCalls: 0 }));
+      selectedCalls: limit, estimatedUsd: estimate, runCapUsd: manifest.maxRunUsd, paidCalls: 0,
+      qualityModels: manifest.qualityModels }));
     return;
   }
   dotenv.config({ path: process.env.CASSIAN_ENV_FILE || '.env.local', quiet: true });
@@ -57,7 +58,7 @@ async function main(): Promise<void> {
       let result: Call;
       try {
         const response = await client.messages.create(llm.sanitizeParamsForModel({
-          model: manifest.models[step.case.gate], max_tokens: step.case.gate === 'quality' ? 500 : 2000,
+          model: modelForStep(manifest, step.case.gate, step.arm), max_tokens: step.case.gate === 'quality' ? 500 : 2000,
           temperature: 0, system: manifest.prompts[step.case.gate][step.arm],
           messages: [{ role: 'user', content: llm.wrapUserInput('batch', step.case.body) }],
         }), { maxRetries: 0, signal: AbortSignal.timeout(30000) });

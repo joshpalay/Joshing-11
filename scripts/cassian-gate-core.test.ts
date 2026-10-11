@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { schedule, scoreGate, validateManifest, type GateCase, type GateManifest } from './cassian-gate-core';
+import { schedule, scoreGate, validateManifest, modelForStep, type GateCase, type GateManifest } from './cassian-gate-core';
 import { qualityChallenger } from './cassian-gate-prompts';
 const c: GateCase = { id: 'case-a', gate: 'quality', kind: 'development', body: 'q=Which player?',
   question: 'Which player?', expectedDecision: 'hold', expectedReason: { allowedCodes: ['FALSE_PREMISE'] } };
 const manifest: GateManifest = { schemaVersion: 1, id: 'cassian-test', maxRunUsd: 0.75, repeats: 2,
   models: { quality: 'a', factual: 'b' }, prompts: { quality: { baseline: 'a', candidate: 'b' }, factual: { baseline: 'a', candidate: 'b' } }, cases: [c] };
 describe('offline gate replay safeguards and scoring', () => {
+  it('selects arm-specific models only with an identical quality prompt', () => {
+    const comparison: GateManifest = { ...manifest, qualityModels: { baseline: 'a', candidate: 'c' },
+      prompts: { ...manifest.prompts, quality: { baseline: 'same', candidate: 'same' } } };
+    validateManifest(comparison);
+    expect(schedule(comparison).map(s => modelForStep(comparison, s.case.gate, s.arm))).toEqual(['a', 'c', 'c', 'a']);
+    expect(modelForStep(manifest, 'quality', 'candidate')).toBe('a');
+    expect(modelForStep(manifest, 'factual', 'candidate')).toBe('b');
+    expect(() => validateManifest({ ...comparison, prompts: manifest.prompts })).toThrow();
+    expect(() => validateManifest({ ...comparison, cases: [{ ...c, gate: 'factual' }] })).toThrow();
+    expect(() => validateManifest({ ...comparison, qualityModels: { baseline: 'a', candidate: 'a' } })).toThrow();
+    expect(() => validateManifest({ ...comparison, qualityModels: { baseline: 'b', candidate: 'c' } })).toThrow();
+  });
   it('alternates order without repeating call identities', () => {
     validateManifest(manifest); const rows = schedule(manifest);
     expect(rows.map(r => r.arm)).toEqual(['baseline', 'candidate', 'candidate', 'baseline']);
