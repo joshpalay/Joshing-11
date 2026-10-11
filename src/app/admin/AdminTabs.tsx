@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 
-// The admin nav, organized around the four JOBS the tool does rather than one
+// The admin nav, organized around the jobs the tool does rather than one
 // flat route list (D-ADMIN-USABILITY-01):
 //   Review queue — flagged/demoted questions waiting on a human call
 //   Author       — write questions by hand (Crafter) or import a CSV
 //   Library      — the full question pool audit table
+//   Cassian      — answer and rate experimental questions
 //   Domains      — one subject-structure section with three views:
 //                  Tree (knowledge graph) · Supply · Merge suggestions
 // Pages keep their existing routes and `active` keys; this component maps each
@@ -24,12 +25,12 @@ export type AdminTabKey =
   | 'supply'
   | 'domains';
 
-type Section = 'overview' | 'review' | 'author' | 'library' | 'domains';
+type Section = 'overview' | 'review' | 'author' | 'library' | 'cassian' | 'domains';
 
 const SECTION_OF: Record<AdminTabKey, Section> = {
   overview: 'overview',
   reports: 'review',
-  cassian: 'review',
+  cassian: 'cassian',
   disputes: 'review',
   crafter: 'author',
   'bulk-upload': 'author',
@@ -44,6 +45,7 @@ const SECTIONS: Array<{ key: Section; label: string; href: string }> = [
   { key: 'review', label: 'Review queue', href: '/admin/reports' },
   { key: 'author', label: 'Author', href: '/admin/crafter' },
   { key: 'library', label: 'Library', href: '/admin/questions' },
+  { key: 'cassian', label: 'Cassian', href: '/admin/cassian' },
   { key: 'domains', label: 'Domains', href: '/admin/knowledge' },
 ];
 
@@ -52,7 +54,6 @@ const SUBTABS: Partial<Record<Section, Array<{ key: AdminTabKey; label: string; 
     review: [
       { key: 'reports', label: 'Reports & demotions', href: '/admin/reports' },
       { key: 'disputes', label: 'Answer disputes', href: '/admin/disputes' },
-      { key: 'cassian', label: 'Cassian experiment', href: '/admin/cassian' },
     ],
     author: [
       { key: 'crafter', label: 'Write questions', href: '/admin/crafter' },
