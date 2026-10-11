@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-10
+last-reviewed: 2026-10-11
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3339,5 +3339,88 @@ recommended-but-unrun blind-labeling pass, now at 90 of 682.
 3. A blind-labeling pass on `answer_leak_any_token` remains due (now 90 of
    682) — recommended since 2026-09-25, still not run.
 4. The six open `ContentReport` rows remain unaddressed, now 34 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-11 (diagnosis-review) — 34 clean days on `answer_leak_partial`; everything else incremental, no decision-resolving change
+
+**Environment note:** this session has no `.env`/`.env.local` at all (only
+`.env.example`, which doesn't define any of this doc's flags) and no
+Vercel MCP tool to read production env var values directly — so, per this
+run's instructions, `PARTIAL_ANSWER_LEAK_ENABLED` / `DOMAIN_DRIFT_DROP_ENABLED`
+/ `ANSWER_SHAPE_GATE_ENABLED` cannot be confirmed "unchanged" by direct
+inspection; that claim rests entirely on `GateDropStat` telemetry continuing
+to accrue `considered` rows under each gate (a flag that had been reverted
+to its code-default would stop producing the behavior its counter measures,
+though a steady `considered` count alone doesn't distinguish "still on" from
+"still off but still being measured" for the two gates that are
+measure-only). `process.env` also has no `ANTHROPIC_API_KEY` — confirmed via
+`env | grep -i anthropic`, which found only proxy/session variables, no
+Anthropic credential. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`, confirmed via `list_projects`)
+available and used for all counters below.
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 888 | 0 | 0 |
+| `domain_drift` | 888 | 1 | 0 |
+| `answer_leak_single_word` | 785 | 2 | 0 |
+| `answer_leak_any_token` | 702 | **94** | 0 |
+| `answer_shape` | 888 | 2 | 0 |
+| `quality` | 888 | 356 | 231 (unchanged since 2026-10-03) |
+
+`answer_leak_partial` now at **34 consecutive clean days**, 888 considered
+(up from 868) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 868→888 considered) — the 2026-10-01 hit's Vercel log
+still hasn't been pulled by anyone. `answer_leak_single_word` gained 20
+considered (765→785), no new drop. `answer_leak_any_token` gained 4 more
+drops (90→94, 682→702 considered) — the recommended blind-labeling pass
+(open decision 6) remains unrun, now 16 days past its 2026-09-25
+recommendation. `quality`'s `failed_open` stays flat at 231 — no further
+recurrence of the 2026-10-02 `daily_build`-scope event; its `dropped` count
+rose 345→356, ordinary daily hits.
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+full id, all still `status='open'`:** `139e1932-d4e4-4fc6-9f78-53a05cecadfe`,
+`800c44a3-b00a-4226-8c46-8d7e6f263a6b`, `357618e3-3102-40bc-bd6b-427c40b78514`
+(the first three), plus `b1804847-572e-4680-ac24-300f208c739d`,
+`3c3f9989-390a-451e-bb28-19edf65c966e`, `815b3ad8-3b54-4c64-a102-0854f223bcc3`
+(the 2026-09-06-evening three) — now **35 days** since filing.
+
+**Bank `still_servable` (is_duplicate=false): 2,791**, up from 2,767 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** `git log --since=2026-10-10`
+on `self-answering.ts`, `off-domain-second-opinion.ts`,
+`generate-questions.ts`, `sweep-bank-quality.ts`, and
+`rewrite-bank-demotions.ts` returns nothing. The only commit on `main` since
+the last review's commit is `#1762` ("tell the sender when a friend request
+is accepted") — confirmed by diffing its file list directly: touches
+`src/app/page.tsx`, `AcceptedRequestsCard.tsx`, `src/server/db/queries/activity.ts`,
+`friend-news.ts`, `friend-news-copy.ts`, and their tests — none of this
+doc's tracked gate/generation paths.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY`
+available in this session (checked both `.env`/`.env.local`, which don't
+exist, and `process.env` directly). Stands at 9/11 from its last real run,
+unchanged. Per this run's instructions, not attempting to run it even if a
+key were found, since that would cost real API tokens/money without Josh's
+go-ahead — moot here since no key exists anyway.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 94 of 702.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 34+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 94 of
+   702) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 35 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.

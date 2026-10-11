@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-10
+last-reviewed: 2026-10-11
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -546,6 +546,64 @@ not "live."
 ### Next steps (unchanged)
 1. Watch for a second `loosened: true` pick — still just 1 ever (fired
    2026-10-06), now four cron cycles with no second fire.
+2. Once a handful of loosened picks exist, run Q3 for real and start
+   reading the ≥14-day clock from the first fire, not the deploy date.
+3. Watch whether the `tier` miss-reason share keeps growing relative to the
+   other three reasons, or just tracks them proportionally as it has so far.
+
+### 2026-10-11 (diagnosis-review) — still only one loosened pick ever, five cron cycles after the first fire; nothing new to read
+
+**Environment note:** live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available this session. No
+local `.env` file exists in this session (confirmed), so env-var values
+(`BANK_LOOSE_TIER_MAX_PER_BUILD`) can't be read directly either way — not
+needed this round since every check below is a DB/PR/git check, not a flag
+check.
+
+**The loosening has fired exactly once, all time, still.**
+`SELECT count(*) ... WHERE (a->>'loosened')::boolean = true` returns **1**
+— the same single fire from 2026-10-06 (`b691c375…`). No second fire in
+the five cron cycles since (2026-10-07 through 2026-10-10; today's hasn't
+run yet at review time).
+
+**Q1 (trailing 14 days), re-run:** 2026-09-27 through 2026-10-10. Blended
+hit rate stays noisy day to day (31.4%–66.7%), with 2026-10-10 at 59.4%
+(19 hits / 13 misses) — inside the existing noisy range, same read as every
+prior entry. `loosened`/`builds_loosened` are 1/1 only on 2026-10-06, 0 on
+every other day in the window, unchanged.
+
+**Q2 (gen_calls_per_build), re-run:** 2.50–5.50 across the window, with
+2026-10-10 at 3.67 — inside the existing noisy range, no visible shift.
+
+**Q3 still has exactly one row to look at** — unchanged since every prior
+review, not worth running the full join again for n=1.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 41 (up from 36), `filtered` 18 (up from 14),
+`no_stock` 16 (up from 13), `tier` **10 (up from 9)**. 85 total post-deploy
+misses now; `tier` holds at roughly the same share (10 of 85, 11.8%, was
+9 of 72, 12.5%) — still growing in step with the other three reasons, not
+disproportionately, same read as every prior entry. **Not reading this as
+a signal either way**, same caution as every prior review.
+
+**PR state, re-confirmed directly via the GitHub API (`mcp__github__pull_request_read`),
+not inferred from git log:** `#1744` is still `state: closed`, `merged: true`,
+`merged_at: 2026-10-03T17:27:20Z` — unchanged from every prior reading.
+
+**No code change since the last review** to `generate-questions.ts`,
+`build-context.ts`, or `src/server/db/queries/daily.ts` — the only new
+commit on `main` since the last review, `8a142aa` ("tell the sender when a
+friend request is accepted"), touches friend-request notification code
+only, confirmed by checking its file list; no overlap with any of the
+three.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for
+§6 still hasn't meaningfully started — one fire, five cron cycles ago, is
+not "live."
+
+### Next steps (unchanged)
+1. Watch for a second `loosened: true` pick — still just 1 ever (fired
+   2026-10-06), now five cron cycles with no second fire.
 2. Once a handful of loosened picks exist, run Q3 for real and start
    reading the ≥14-day clock from the first fire, not the deploy date.
 3. Watch whether the `tier` miss-reason share keeps growing relative to the

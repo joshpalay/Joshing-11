@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-10
+last-reviewed: 2026-10-11
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2209,5 +2209,85 @@ list directly.
    isolated or recurs again.
 4. `batch_dedup`/`recent_history` `failed_open` both eased this reading
    (25/400, 5/400) — rolling-window easing, not a reversal; keep watching.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-11 (diagnosis-review) — no new dispute-queue resolutions; all five tracked PRs re-confirmed merged via the GitHub API; `batch_dedup`/`recent_history`/`quality` counters move within the usual rolling-window noise; build p50 essentially flat; `subject_entity` coverage holds; no new code
+
+**Environment note:** this session has no `.env`/`.env.local` (only
+`.env.example`) and no `ANTHROPIC_API_KEY` in the process environment, so
+nothing costly was run and `npm run check:question-lifecycle` /
+`npm run check:gate-flags` still need `DATABASE_URL`, which is absent.
+Live, read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`, `ACTIVE_HEALTHY`, `us-west-2`) available this
+session; all numbers below were reproduced by hand via that connection
+using the same queries `check-question-lifecycle.mjs` and
+`check-gate-flags.mjs` run (read directly from both scripts to match their
+exact SQL, not approximated).
+
+**All five PRs in this doc's `related-pr` frontmatter re-confirmed via the
+GitHub API (not just `git log`): `#1646`, `#1698`, `#1702`, `#1709`,
+`#1720` are all `state: closed`, `merged: true`, with merge timestamps
+unchanged from what this doc already had on record.** No revert of any of
+them.
+
+**`#1702` dispute queue: no new activity.** `GradeDispute` status counts
+(all-time): `pending` **49** (unchanged), `alternative_added` **34**
+(unchanged since yesterday's two new resolutions), `dismissed` 5
+(unchanged). `max(reviewed_at)` across the whole table is still
+**2026-10-09T21:54:03.529Z** — no human review since then. Decision 4
+(Phase 4's labeled set) remains exactly where it was: still no
+human-reviewed dispute in the data.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 537** rows generated since that
+timestamp are missing it, re-queried directly.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 420 | 50 | **5** |
+| `batch_dedup` | 420 | 16 | **25** |
+| `quality` | 420 | 174 (41.4%) | 1 |
+
+`considered` rose 400→420 (new `daily_build`-scope traffic entering the
+rolling window). `recent_history`'s `failed_open` holds flat at 5;
+`batch_dedup`'s holds flat at 25; `quality`'s holds flat at 1 (the
+2026-10-02 event remains the only one in the 14-day window). `quality`'s
+scoped drop rate (41.4%) stays inside the acceptable band. Neither
+`batch_dedup` nor `recent_history` is root-caused; same "flagging for
+awareness" posture as every prior entry.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,135ms** (n=43), essentially flat vs. the last reading (37,297ms, n=43)
+— still well above the 25,243ms pre-deploy baseline. Not re-deriving the
+outlier-cluster cross-check this pass (that lives in
+`daily-build-latency-deferral-plan.md`, not re-reviewed in this session);
+the standing explanation for the elevated p50 (the untraced outlier
+cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log --since=2026-10-10`
+on all five returns nothing. The only new commit on `main`, `#1762` (tell
+the sender when a friend request is accepted), touches friend-request and
+notification code, not any of the five.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data.
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s rolling-window `failed_open` (flat at 1) stays
+   isolated or recurs again.
+4. `batch_dedup`/`recent_history` `failed_open` both hold flat this reading
+   (25/420, 5/420) — keep watching for recurrence or further easing as the
+   rolling window moves.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
