@@ -70,10 +70,27 @@ if (rows.length !== expectedTopics * 2 || new Set(rows.map((row) => row.id)).siz
     rows.filter((row) => row.domain === domain).map((row) => row.arm).sort().join(',') !== 'baseline,candidate')) {
   throw new Error('Import requires one unique parsed candidate per topic and arm.');
 }
+// Preserve every attempt in the checkpoint and budget ledger. An independent
+// novelty audit may withhold snapshots from the blind review queue without
+// rewriting output or generating replacements.
+const exclusionsPath = process.env.CASSIAN_REVIEW_EXCLUSIONS_FILE;
+const exclusions = exclusionsPath ? JSON.parse(readFileSync(resolve(exclusionsPath), 'utf8')) as {
+  runId: string; manifestSha: string; exclusions: { id: string; reason: string }[];
+} : { runId: manifest.id, manifestSha, exclusions: [] };
+if (exclusions.runId !== manifest.id || exclusions.manifestSha !== manifestSha ||
+  !Array.isArray(exclusions.exclusions) ||
+  new Set(exclusions.exclusions.map((item) => item.id)).size !== exclusions.exclusions.length ||
+  exclusions.exclusions.some((item) => !rows.some((row) => row.id === item.id) || !item.reason?.trim())) {
+  throw new Error('Review exclusions must match the frozen run and identify existing candidates with reasons.');
+}
+const excludedIds = new Set(exclusions.exclusions.map((item) => item.id));
+const reviewRows = rows.filter((row) => !excludedIds.has(row.id));
+if (!reviewRows.length) throw new Error('No candidates remain for review.');
 if (!process.argv.includes('--apply')) {
   console.log(JSON.stringify({ mode: 'dry-run', runId: manifest.id, candidates: rows.length,
-    held: rows.filter((row) => row.machineStatus === 'held').length,
-    pass: rows.filter((row) => row.machineStatus === 'passed_core_gates').length,
+    reviewCandidates: reviewRows.length, excluded: excludedIds.size,
+    held: reviewRows.filter((row) => row.machineStatus === 'held').length,
+    pass: reviewRows.filter((row) => row.machineStatus === 'passed_core_gates').length,
     writes: 0 }, null, 2));
   process.exit(0);
 }
@@ -90,7 +107,7 @@ try {
   );
   if (run.rows[0]?.manifest_sha !== manifestSha) throw new Error('Durable run manifest mismatch.');
   let inserted = 0;
-  for (const row of rows) {
+  for (const row of reviewRows) {
     const result = await client.query(
       `INSERT INTO "CassianCandidate" (
         id, run_id, domain, breadth, arm, model, question_text, answer,
@@ -114,7 +131,8 @@ try {
     }
   }
   await client.query('COMMIT');
-  console.log(JSON.stringify({ runId: manifest.id, candidates: rows.length, inserted }));
+  console.log(JSON.stringify({ runId: manifest.id, candidates: rows.length,
+    reviewCandidates: reviewRows.length, excluded: excludedIds.size, inserted }));
 } catch (error) {
   await client.query('ROLLBACK').catch(() => undefined);
   throw error;

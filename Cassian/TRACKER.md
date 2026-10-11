@@ -1,6 +1,6 @@
 # Cassian tracker
 
-Updated 2026-10-08. The original Cassian implementation merged as [#1745](https://github.com/joshpalay/Joshing-11/pull/1745), the malformed-key fix as [#1746](https://github.com/joshpalay/Joshing-11/pull/1746), the explanation replay as [#1747](https://github.com/joshpalay/Joshing-11/pull/1747), the future-pricing note as [#1748](https://github.com/joshpalay/Joshing-11/pull/1748), the owner-reviewed bank import as [#1749](https://github.com/joshpalay/Joshing-11/pull/1749), and the bank audit/admin feedback update as [#1750](https://github.com/joshpalay/Joshing-11/pull/1750). Code worktree: `_scratch/cassian-worktree` under the repository root. The original checkout has unrelated edits and was not reset.
+Updated 2026-10-11. The original Cassian implementation merged as [#1745](https://github.com/joshpalay/Joshing-11/pull/1745), the malformed-key fix as [#1746](https://github.com/joshpalay/Joshing-11/pull/1746), the explanation replay as [#1747](https://github.com/joshpalay/Joshing-11/pull/1747), the future-pricing note as [#1748](https://github.com/joshpalay/Joshing-11/pull/1748), the owner-reviewed bank import as [#1749](https://github.com/joshpalay/Joshing-11/pull/1749), and the bank audit/admin feedback update as [#1750](https://github.com/joshpalay/Joshing-11/pull/1750). Code worktree: `_scratch/cassian-worktree` under the repository root. The original checkout has unrelated edits and was not reset.
 
 ## Owner decisions
 
@@ -26,12 +26,13 @@ Updated 2026-10-08. The original Cassian implementation merged as [#1745](https:
 | Explanation-free factual-gate replay | $0.151923 |
 | Answer grading in connected ledger | $0.005977 |
 | Answer-only creation trial | $0.449832 |
-| Haiku 5.5 paired trial | $0.226849 |
-| Current connected ledger spent | $2.736258 |
+| Haiku 5.5 first block, including later grading | $0.228488 |
+| Haiku 5.5 second block | $0.239502 |
+| Current connected ledger spent | $2.977399 |
 | Current connected ledger reserved/uncertain | $0 |
-| Remaining authorized lifetime | $7.263742 |
+| Remaining authorized lifetime | $7.022601 |
 
-The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 36 immutable snapshots, including 12 new blind-review cards; the owner answered 23 first-run cards and saved 22 overall ratings. The malformed Placeholder card was answered before its allocation fix and remains unrated; one pilot candidate was never shown. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. Six later source-audited, nonduplicate candidates were added to shared stock at the owner's request; their Cassian review records remain separate from gameplay.
+The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 46 immutable snapshots, including ten new blind-review cards; the first Haiku 5.5 block has all twelve owner ratings. Two second-block attempts remain private for novelty exclusions; the owner answered 23 first-run cards and saved 22 overall ratings. The malformed Placeholder card was answered before its allocation fix and remains unrated; one pilot candidate was never shown. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. Six later source-audited, nonduplicate candidates were added to shared stock at the owner's request; their Cassian review records remain separate from gameplay.
 
 The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/private/manifest.json`, SHA-256 `1d8312dcf9728de46a2a7af6206076ee9afc415bc4bd2234836ef5b1dcf91536`. The committed `Cassian/manifest.json` is a generic public estimator example. Set `CASSIAN_MANIFEST_FILE` to the private path for run-specific estimates, import or recovery. Raw responses/checkpoint remain ignored under `_scratch/Cassian/cassian-pilot-2026-10-03/`.
 
@@ -40,13 +41,13 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 | ID | State | Evidence / finish line |
 | --- | --- | --- |
 | C0 Baseline | Partial | Recent model/gate IDs, tokens and internal spend reproduced. Provider invoice and deployed SHA not reconciled. Exact production amounts are kept privately because the repository is public. |
-| C1 Offline runner | Operational; failure tests incomplete | Dry-run, 3-topic run, 12-topic resume and DB budget settlement worked. Test recovery and overlapping runners before future paid work. |
+| C1 Offline runner | Recovery checks complete | Completed resume reused calls at zero cost; missing checkpoint failed before repeat dispatch; runner lock blocked overlap and released correctly. Mocked tests cover uncertainty, cap, manifest and settlement failures. |
 | C2 Admin ratings | Owner review completed; feedback fix deployed | 23 available cards answered, 22 overall ratings saved. The sole unrated card was the malformed Placeholder item; no further rating is needed. The post-rating control now separates candidate disposition from gate-decision correctness. Authenticated submission of the new form has not yet been observed. |
 | C3 First comparison | Owner and source review complete | [Owner review](runs/cassian-pilot-2026-10-03/OWNER-REVIEW.md): 20/22 rated Good for appeal, but source-audited keeps are 8/12 Sonnet and 5/12 Haiku. Small sample; no production writer switch. |
 | C4 Below-bonus panel | Admin played in production | The owner answered the available cards in the admin experiment. The earlier protected-preview and production-login issues are historical. No ordinary-player rollout is planned. |
-| C5 Follow-up | Bank baseline measured; rollout sample immature | [Bank supply/reuse](BANK-SUPPLY.md): cross-player reuse is visible. The 2026-10-08 read-only rerun found only nine actual builds after the confirmed difficulty-rule deployment, so re-measure after at least 20. |
+| C5 Follow-up | Bank baseline measured; rollout sample immature | [Bank supply/reuse](BANK-SUPPLY.md): cross-player reuse is visible. The 2026-10-11 read-only rerun found seventeen actual builds across four users after the confirmed difficulty-rule deployment, so re-measure after at least 20. |
 | C5a Explanation yield | Replay and bounded creation trial complete | [Explanation yield](EXPLANATION-YIELD.md): 24 saved questions replayed without explanations at the factual gate; source audit confirmed only one genuine explanation-only recovery. In the [creation trial](ANSWER-ONLY-CREATION.md), both arms produced one independently usable question for three topic targets after capped replacements. No explanation-only control hold occurred; answer-only cost more in total despite a lower per-attempt cost. No production change. |
-| C5b Haiku 5.5 writer trial | Offline block complete; owner review pending | [Six-topic paired trial](HAIKU-55.md) reused saved sources and fixed gates. Twelve candidates were imported to admin-only Cassian review. No production writer switch or bank import. |
+| C5b Haiku 5.5 writer trial | First block owner review complete; second block pending | [First six-topic trial](HAIKU-55.md): twelve ratings saved. [Second block](runs/cassian-haiku55-block2-2026-10-11/RESULTS.md): twelve attempts generated, ten original cards imported after two novelty exclusions. Four complete owner pairs and two unpaired cards; costs include all attempts. No writer switch or bank import. |
 | C6 Final report | Pending | Human quality, cost per accepted unique question, topic coverage, latency, fixed-workload monthly feasibility and budget left. |
 
 ## Current caveats
@@ -87,8 +88,10 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 
 ## Next exact actions
 
-1. Owner: rate the new cards at `/admin/cassian` or after Daily Five. Judge the question, answer and explanation separately; use the post-rating gate controls to mark false holds and false passes. An old unread pilot card may appear too. Verify a feedback submission persists after reload.
-2. Reconcile owner ratings with the private source audit in `_scratch/Cassian/cassian-haiku55-2026-10-08/private/SOURCE-AUDIT.md`. Report usable novel questions per dollar and topic breadth. Do not promote a candidate whose answer or explanation needs revision.
+Latest handoff, 2026-10-11: all twelve first Haiku 5.5 cards answered/rated (Sonnet Good/Fix/Reject 1/4/1; Haiku 5/1/0). Owner Good plus source Keep: one versus three, with only one versus two also machine-passed. The second six-topic block generated twelve attempts for $0.239502; ten original cards were imported after two novelty exclusions. Four complete review pairs and two unpaired cards remain pending. Live verification found zero new exposures/answers/ratings, 46 total snapshots, no new shared-bank fact rows and $0 reserved. Recovery checks and focused tests passed before dispatch. Private checkpoint/manifest/source/novelty artifacts remain ignored; no writer/gate settings changed.
+
+1. Owner: rate the ten second-block cards at `/admin/cassian` or after Daily Five. Judge the question, answer and explanation separately; use the post-rating gate controls to mark false holds and false passes. An old unread pilot card may appear too. Verify a feedback submission persists after reload.
+2. Reconcile second-block ratings with its private pre-review source audit, then combine with the first block. Separate four complete pairs from two unpaired cards and include all twelve attempt costs. Report usable novel questions per dollar and topic breadth. Do not promote a candidate whose answer or explanation needs revision.
 3. After at least 20 builds on PR #1744's production version, re-run `scripts/cassian-bank-audit.ts` and inspect real placements, generation calls and ready time. Reconcile the private current-rate monthly estimate with provider billing and a fixed workload before deciding on a live writer test. Keep production prompts, gates and no-repeat rules unchanged meanwhile.
 
 At each handoff record branch/commit, deployment SHA, candidate/exposure/review counts, budget spent/reserved, exact model/gate IDs, tests, human feedback and remaining risks. Implementation is not the final experiment result.
