@@ -1,29 +1,54 @@
 export type Gate = 'quality' | 'factual';
-export type GateCase = {
-  id: string; gate: Gate; kind: 'development' | 'control'; body: string; question: string;
+export type GateItem = {
+  id: string; question: string;
   expectedDecision: 'pass' | 'hold';
   expectedReason?: { allowedCodes?: string[]; allTerms?: string[]; anyTerms?: string[] };
 };
+export type GateCase = { id: string; gate: Gate; kind: 'development' | 'control'; body: string }
+  & (GateItem | { items: GateItem[] });
+export function caseItems(c: GateCase): GateItem[] { return 'items' in c ? c.items : [c]; }
 export type GateManifest = {
   schemaVersion: 1; id: string; maxRunUsd: number; repeats: number;
   models: Record<Gate, string>;
   /** Offline model comparison: identical quality prompts, quality cases only. */
   qualityModels?: Record<'baseline' | 'candidate', string>;
+  /** Offline format comparison; JSON mode is limited to the measured Haiku 4.5 configuration. */
+  qualityFormats?: Record<'baseline' | 'candidate', 'text' | 'json'>;
+  /** Freeze the exact schema alongside each request body, not only its format flag. */
+  qualitySchemas?: Record<string, Record<string, unknown>>;
+  /** Longer offline timeout for first structured-schema compilation; never changes the live timeout. */
+  qualityTimeoutMs?: number;
   prompts: Record<Gate, Record<'baseline' | 'candidate', string>>;
   cases: GateCase[];
 };
 export function validateManifest(m: GateManifest): void {
+  const formatComparison = m.qualityFormats && m.qualityFormats.baseline !== m.qualityFormats.candidate;
+  const validItem = (c: GateItem) => /^[a-z0-9-]+$/.test(c.id) && ['pass', 'hold'].includes(c.expectedDecision) && !!c.question?.trim();
   if (m.schemaVersion !== 1 || !/^cassian-[a-z0-9-]+$/.test(m.id) ||
+    (m.qualityTimeoutMs !== undefined && (!Number.isInteger(m.qualityTimeoutMs) || m.qualityTimeoutMs < 30000 || m.qualityTimeoutMs > 120000)) ||
     !Number.isFinite(m.maxRunUsd) || m.maxRunUsd <= 0 || m.maxRunUsd > 0.75 ||
     !Number.isInteger(m.repeats) || m.repeats < 1 || m.repeats > 2 ||
     !Array.isArray(m.cases) || !m.cases.length || m.cases.length > 16 ||
     new Set(m.cases.map(c => c.id)).size !== m.cases.length ||
     m.cases.some(c => !/^[a-z0-9-]+$/.test(c.id) || !['quality', 'factual'].includes(c.gate) ||
-      !['development', 'control'].includes(c.kind) || !['pass', 'hold'].includes(c.expectedDecision) ||
-      !c.body?.trim() || !c.question?.trim()) ||
+      !['development', 'control'].includes(c.kind) || !c.body?.trim() ||
+      ('items' in c ? 'question' in c || 'expectedDecision' in c || !Array.isArray(c.items) || c.gate !== 'quality' || c.items.length < 2 || c.items.length > 6 ||
+        new Set(c.items.map(i => i.id)).size !== c.items.length || c.items.some(i => !validItem(i)) ||
+        [...c.body.matchAll(/(?:^|\n)\[(\d+)\] domain=[^\n]*\n    q=([^\n]*)\n    a=/g)].length !== c.items.length ||
+        [...c.body.matchAll(/(?:^|\n)\[(\d+)\] domain=[^\n]*\n    q=([^\n]*)\n    a=/g)]
+          .some((match, index) => Number(match[1]) !== index || match[2] !== c.items[index].question)
+        : !validItem(c))) ||
     (['quality', 'factual'] as const).some(g => !m.models[g] ||
       !m.prompts[g]?.baseline || !m.prompts[g]?.candidate ||
-      (!(m.qualityModels && g === 'quality') && m.prompts[g].baseline === m.prompts[g].candidate)) ||
+      (!(g === 'quality' && (m.qualityModels || formatComparison)) && m.prompts[g].baseline === m.prompts[g].candidate)) ||
+    (m.qualityFormats !== undefined && (!['text', 'json'].includes(m.qualityFormats.baseline) ||
+      !['text', 'json'].includes(m.qualityFormats.candidate) || m.models.quality !== 'claude-haiku-4-5-20251001' ||
+      !!m.qualityModels || m.cases.some(c => c.gate !== 'quality') ||
+      (formatComparison && m.prompts.quality.baseline !== m.prompts.quality.candidate))) ||
+    (m.qualityFormats && Object.values(m.qualityFormats).includes('json') ?
+      !m.qualitySchemas || Object.keys(m.qualitySchemas).length !== m.cases.length ||
+        m.cases.some(c => JSON.stringify(m.qualitySchemas?.[c.id]) !== JSON.stringify(qualityOutputSchema(caseItems(c).length)))
+      : m.qualitySchemas !== undefined) ||
     (m.qualityModels !== undefined && (!m.qualityModels.baseline?.trim() || !m.qualityModels.candidate?.trim() ||
       m.qualityModels.baseline === m.qualityModels.candidate || m.models.quality !== m.qualityModels.baseline ||
       m.prompts.quality.baseline !== m.prompts.quality.candidate || m.cases.some(c => c.gate !== 'quality')))) {
@@ -39,7 +64,7 @@ export function schedule(m: GateManifest): { key: string; case: GateCase; arm: '
       .map(a => ({ key: `${c.gate}:${c.id}:${a}:${r + 1}`, case: c,
         arm: a as 'baseline' | 'candidate', repeat: r + 1 }))).flat());
 }
-export function scoreGate(raw: string, c: GateCase, parse?: (raw: string) => Record<string, unknown> | null): {
+export function scoreGate(raw: string, c: GateItem & { gate: Gate }, parse?: (raw: string) => Record<string, unknown> | null): {
   valid: boolean; drop: boolean | null; reason: string | null;
   decisionCorrect: boolean; reasonCorrect: boolean | null; leakEvidenceInStem: boolean | null;
 } {
@@ -70,4 +95,36 @@ export function scoreGate(raw: string, c: GateCase, parse?: (raw: string) => Rec
     (!expectation.anyTerms || expectation.anyTerms.some(t => text.toLowerCase().includes(t.toLowerCase()))) && evidence !== false);
   return { valid: true, drop, reason: text || null, decisionCorrect: drop === expectedHold,
     reasonCorrect: !expectedHold && drop ? false : reasonCorrect, leakEvidenceInStem: evidence };
+}
+
+/** Reject the whole batch on malformed index/reason mappings; never score a partial parse as passes. */
+export function scoreCase(raw: string, c: GateCase, parse?: (raw: string) => Record<string, unknown> | null):
+  (ReturnType<typeof scoreGate> & { itemId: string; index: number })[] {
+  const items = caseItems(c);
+  if (!('items' in c)) return [{ ...scoreGate(raw, c, parse), itemId: c.id, index: 0 }];
+  let parsed: Record<string, unknown> | null = null;
+  try { parsed = parse ? parse(raw) : JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); } catch { /* invalid below */ }
+  const drops = parsed?.drop_indices;
+  const reasons = parsed?.reasons;
+  const valid = Array.isArray(drops) && new Set(drops).size === drops.length &&
+    drops.every(i => typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < items.length) &&
+    !!reasons && typeof reasons === 'object' && !Array.isArray(reasons) &&
+    Object.keys(reasons).length === drops.length &&
+    Object.keys(reasons).every(k => /^(0|[1-9][0-9]*)$/.test(k) && drops.includes(Number(k))) &&
+    drops.every(i => typeof (reasons as Record<string, unknown>)[String(i)] === 'string' &&
+      ((reasons as Record<string, string>)[String(i)]).trim().length > 0);
+  return items.map((item, index) => ({ ...scoreGate(valid ? JSON.stringify({
+    drop_indices: (drops as number[]).includes(index) ? [0] : [],
+    reasons: (drops as number[]).includes(index) ? { '0': (reasons as Record<string, unknown>)[String(index)] } : {},
+  }) : 'invalid batch', { ...item, gate: c.gate }), itemId: item.id, index }));
+}
+
+export function qualityOutputSchema(itemCount: number): Record<string, unknown> {
+  if (!Number.isInteger(itemCount) || itemCount < 1 || itemCount > 6) throw new Error('Invalid quality schema size.');
+  const indices = Array.from({ length: itemCount }, (_, i) => i);
+  const prefix = '^(ANSWER_LEAKED|OPINION_OR_VAGUE|FALSE_PREMISE|SELF_ANSWERING|GENERIC_AT_TIER|MULTI_PART|MISLEADING_SETUP|OFF_DOMAIN|DEFINITION_SUPPLIED): .+';
+  return { type: 'object', properties: {
+    drop_indices: { type: 'array', items: { type: 'integer', enum: indices } },
+    reasons: { type: 'object', properties: Object.fromEntries(indices.map(i => [String(i), { type: 'string', pattern: prefix }])), additionalProperties: false },
+  }, required: ['drop_indices', 'reasons'], additionalProperties: false };
 }

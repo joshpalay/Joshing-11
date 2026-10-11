@@ -54,3 +54,19 @@ For every held item, give ONE established defect with a short exact quote from q
 
 Return only { "drop_indices": [indices], "reasons": { "<index>": "<DEFECT_NAME>: <exact q evidence and explanation>" } }. Use JSON escaping for quotes. No commentary or fences. Every dropped index needs a reason; no reasons for kept indices. If none: { "drop_indices": [], "reasons": {} }.`;
 }
+
+/** Third offline revision: identify the requested component and group asks before judging a leak/multipart defect. */
+export function qualityComponentChallenger(original: string): string {
+  const revised = qualityRecallChallenger(original)
+    .replace('4. SELF_ANSWERING — q= actually prints the requested name, word or a valid answer variant. Eponym names count when the question asks for that SAME name; they do not supply an unstated first name, date or reason. For a compound answer, assess what is actually supplied rather than equating a partial category with the full answer.',
+      `4. SELF_ANSWERING — identify WHAT COMPONENT the interrogative requests before looking for a printed answer. If it explicitly asks for a FIRST/GIVEN name, compare the first/given name in a= with q=; a printed surname, title or full identity known from memory does NOT print that given name. Never complete a person's name using your knowledge and call that completion supplied by q=. An eponym supplies the identity/surname it actually prints when THAT is asked for, but not an unstated first name, birth date or reason. For an explicit given-name ask, if the requested given name and its valid variants are absent from q=, SELF_ANSWERING cannot apply. Check independent defects instead. For compound answers, identify the requested components separately rather than equating partial context with the full solution.`)
+    .replace('6. MULTI_PART — two DIFFERENT asks (name plus date, object plus location) require separate facts. Several clues supporting one identification are not multiple asks. One ask for multiple items of the SAME kind is legitimate name_multiple.',
+      `6. MULTI_PART — count REQUEST GROUPS, not answer tokens, examples or retrieved facts. Name two/three/several items of the SAME requested kind is ONE legitimate name_multiple group; never count each returned item as its own ask. A second request for a DIFFERENT attribute/category creates another group (names PLUS dates; objects PLUS a quantity; people PLUS a location). Several clues supporting one identification are not multiple asks. For a hold, quote the phrases requesting the different groups and explain those groups. If one group asks for several names and another for a count, there are TWO groups, not one per name. Do not claim same-kind multiple names should themselves be split.`)
+    .replace('For every held item, give ONE established defect with a short exact quote from q= and explain why it meets that rule.',
+      'For every held item, give ONE established defect with a short exact quote from q= and explain why it meets that rule. Copy the substring literally: do not insert punctuation inside its quotation marks. Start the reason with the exact defect prefix followed by a colon, never a dash. Keep each reason under 40 words.');
+  if (revised === qualityRecallChallenger(original) || !revised.includes('count REQUEST GROUPS') ||
+    !revised.includes('identify WHAT COMPONENT') || !revised.includes('Keep each reason under 40 words.')) {
+    throw new Error('Component policy anchors changed; review before dispatch.');
+  }
+  return revised;
+}

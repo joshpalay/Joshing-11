@@ -606,6 +606,9 @@ function extractFirstBalancedObject(text: string): string | null {
 
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
+    // Quotes and backslashes in introductory prose are not JSON string syntax.
+    // Start tracking them only once the first object's opening brace is found.
+    if (start === -1 && char !== '{') continue;
     if (escaped) {
       escaped = false;
       continue;

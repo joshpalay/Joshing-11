@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { schedule, scoreGate, validateManifest, modelForStep, type GateCase, type GateManifest } from './cassian-gate-core';
-import { qualityChallenger, qualityRecallChallenger } from './cassian-gate-prompts';
+import { schedule, scoreGate, scoreCase, qualityOutputSchema, validateManifest, modelForStep, type GateCase, type GateManifest } from './cassian-gate-core';
+import { qualityChallenger, qualityRecallChallenger, qualityComponentChallenger } from './cassian-gate-prompts';
 const c: GateCase = { id: 'case-a', gate: 'quality', kind: 'development', body: 'q=Which player?',
   question: 'Which player?', expectedDecision: 'hold', expectedReason: { allowedCodes: ['FALSE_PREMISE'] } };
 const manifest: GateManifest = { schemaVersion: 1, id: 'cassian-test', maxRunUsd: 0.75, repeats: 2,
@@ -26,6 +26,8 @@ describe('offline gate replay safeguards and scoring', () => {
   it('rejects raised caps, duplicate identities and extra repeats', () => {
     expect(() => validateManifest({ ...manifest, maxRunUsd: 0.76 })).toThrow();
     expect(() => validateManifest({ ...manifest, repeats: 3 })).toThrow();
+    expect(() => validateManifest({ ...manifest, qualityTimeoutMs: 120001 })).toThrow();
+    expect(() => validateManifest({ ...manifest, qualityTimeoutMs: 29999 })).toThrow();
     expect(() => validateManifest({ ...manifest, cases: [c, c] })).toThrow();
   });
   it('scores a right hold with an invented leak as a wrong reason', () => {
@@ -52,10 +54,48 @@ describe('offline gate replay safeguards and scoring', () => {
   });
   it('retains tier/domain policies and refuses to silently lose them', () => {
     const policy = '5. GENERIC_AT_TIER — preserve tier\n6. MULTI_PART\n8. OFF_DOMAIN — preserve containment\n\n9. DEFINITION_SUPPLIED';
-    const revised = qualityRecallChallenger(policy);
-    expect(revised).toContain('5. GENERIC_AT_TIER — preserve tier');
-    expect(revised).toContain('8. OFF_DOMAIN — preserve containment');
-    expect(() => qualityRecallChallenger(policy.replace('8. OFF_DOMAIN', '8. RENAMED'))).toThrow('anchors changed');
-    expect(() => qualityRecallChallenger(policy.replace('5. GENERIC_AT_TIER', '5. RENAMED'))).toThrow('anchors changed');
+    for (const build of [qualityRecallChallenger, qualityComponentChallenger]) {
+      const revised = build(policy);
+      expect(revised).toContain('5. GENERIC_AT_TIER — preserve tier');
+      expect(revised).toContain('8. OFF_DOMAIN — preserve containment');
+      expect(() => build(policy.replace('8. OFF_DOMAIN', '8. RENAMED'))).toThrow('anchors changed');
+      expect(() => build(policy.replace('5. GENERIC_AT_TIER', '5. RENAMED'))).toThrow('anchors changed');
+    }
+  });
+  const batch: GateCase = { id: 'batch-a', gate: 'quality', kind: 'control',
+    body: '[0] domain=Example tier=accessible fact=a\n    q=Which player?\n    a=One\n\n[1] domain=Example tier=accessible fact=b\n    q=Which year?\n    a=Two',
+    items: [{ id: 'player', question: 'Which player?', expectedDecision: 'pass' },
+      { id: 'year', question: 'Which year?', expectedDecision: 'hold', expectedReason: { allowedCodes: ['FALSE_PREMISE'] } }] };
+  it('maps batch indices to the right item and never marks malformed batches as passes', () => {
+    const raw = JSON.stringify({ drop_indices: [1], reasons: { '1': 'FALSE_PREMISE: wrong date.' } });
+    const scores = scoreCase(raw, batch);
+    expect(scores.map(s => [s.itemId, s.drop, s.decisionCorrect])).toEqual([['player', false, true], ['year', true, true]]);
+    for (const bad of [
+      { drop_indices: [2], reasons: { '2': 'wrong' } }, { drop_indices: [1, 1], reasons: { '1': 'wrong' } },
+      { drop_indices: [1], reasons: {} }, { drop_indices: [], reasons: { '1': 'orphan' } },
+      { drop_indices: [1], reasons: { '01': 'wrong key' } }, { drop_indices: [1], reasons: { '1': 5 } },
+    ]) expect(scoreCase(JSON.stringify(bad), batch).every(s => !s.valid && !s.decisionCorrect)).toBe(true);
+  });
+  it('requires labels to match indexed batch text and rejects unsupported batch gates', () => {
+    validateManifest({ ...manifest, cases: [batch] });
+    expect(() => validateManifest({ ...manifest, cases: [{ ...batch, gate: 'factual' }] })).toThrow();
+    expect(() => validateManifest({ ...manifest, cases: [{ ...batch, body: batch.body.replace('[1]', '[0]') }] })).toThrow();
+    expect(() => validateManifest({ ...manifest, cases: [{ ...batch, body: batch.body.replace('Which year?', 'Other question?') }] })).toThrow();
+  });
+  it('isolates format comparisons from prompt/model changes and bounds JSON schemas', () => {
+    const comparison: GateManifest = { ...manifest, models: { quality: 'claude-haiku-4-5-20251001', factual: 'b' },
+      qualityFormats: { baseline: 'text', candidate: 'json' },
+      qualitySchemas: { [batch.id]: qualityOutputSchema(2) },
+      prompts: { ...manifest.prompts, quality: { baseline: 'same', candidate: 'same' } }, cases: [batch] };
+    validateManifest(comparison);
+    expect(() => validateManifest({ ...comparison, prompts: manifest.prompts })).toThrow();
+    expect(() => validateManifest({ ...comparison, models: { quality: 'unmeasured', factual: 'b' } })).toThrow();
+    expect(() => validateManifest({ ...comparison, qualityModels: { baseline: 'a', candidate: 'c' } })).toThrow();
+    expect(() => validateManifest({ ...comparison, qualitySchemas: undefined })).toThrow();
+    expect(() => validateManifest({ ...comparison, qualitySchemas: { [batch.id]: qualityOutputSchema(1) } })).toThrow();
+    expect(qualityOutputSchema(2)).toMatchObject({ additionalProperties: false,
+      properties: { drop_indices: { items: { enum: [0, 1] } }, reasons: { additionalProperties: false, properties: { '0': {}, '1': {} } } } });
+    expect(() => qualityOutputSchema(7)).toThrow();
+    expect(() => qualityOutputSchema(0)).toThrow();
   });
 });
