@@ -2,6 +2,8 @@
 
 Executed October 11, 2026. Six previously unused Cassian topic targets, two each broad/niche/very narrow, produced twelve original snapshots: one Sonnet 5.5 and one Haiku 5.5 per target. Both arms used the same frozen production prompt builder, prior-fact snapshot, cached reference packet, difficulty target, Haiku 4.5 quality gate and Sonnet 5.5 factual gate. Writer parameters match the first Haiku 5.5 block. Cached-source availability influenced selection; breadth labels are relative and this is not a representative sample.
 
+Owner review is now complete: all ten imported cards answered and rated, eight Good and two Fix. See [OWNER-REVIEW.md](OWNER-REVIEW.md) for the combined analysis and next gate-reliability evaluation. The figures below describe generation/import time; later answer grading added $0.000232.
+
 The manifest froze a **$1.50 run cap**, within the **$10 lifetime cap**, with no automatic retries or replacements. System, writer and gate prompt hashes were checked before dispatch. The three-topic block settled before resume to six. All 36 writer/gate calls completed; no paid retrieval call, failed attempt, replacement call or unresolved reservation occurred.
 
 | Measure | Result |
@@ -23,4 +25,4 @@ Read-only verification found the exact imported set, zero new exposures/answers/
 
 Recovery checks completed before paid dispatch: a completed run resumed without repeating model calls or changing its ledger; a missing completed checkpoint failed before repeat dispatch; a second runner was blocked by the session lock, which was reacquired after release. Mocked budget tests also cover uncertain-charge refusal, chosen run-cap enforcement, changed-manifest refusal and over-reservation settlement halting. TypeScript, affected-file ESLint and 28 focused tests passed.
 
-The manifest, original prompts/sources/prior text, checkpoint, recovery report, source audit, novelty report, review exclusions and post-import verification are ignored under `_scratch/Cassian/cassian-haiku55-block2-2026-10-11/` in the Cassian worktree. No production writer/gate setting or gameplay behavior changed. Next: owner review at `/admin/cassian`, then combined analysis with the first six-pair block. Costs are response-usage estimates at checked list prices, not reconciled provider invoices.
+The manifest, original prompts/sources/prior text, checkpoint, recovery report, source audit, novelty report, review exclusions and post-import verification are ignored under `_scratch/Cassian/cassian-haiku55-block2-2026-10-11/` in the Cassian worktree. No production writer/gate setting or gameplay behavior changed. Owner review and combined analysis are complete; next is a bounded gate replay over saved development cases and clean controls. Costs are response-usage estimates at checked list prices, not reconciled provider invoices.
