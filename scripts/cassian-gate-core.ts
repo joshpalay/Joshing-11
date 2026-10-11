@@ -7,6 +7,8 @@ export type GateCase = {
 export type GateManifest = {
   schemaVersion: 1; id: string; maxRunUsd: number; repeats: number;
   models: Record<Gate, string>;
+  /** Offline model comparison: identical quality prompts, quality cases only. */
+  qualityModels?: Record<'baseline' | 'candidate', string>;
   prompts: Record<Gate, Record<'baseline' | 'candidate', string>>;
   cases: GateCase[];
 };
@@ -20,9 +22,16 @@ export function validateManifest(m: GateManifest): void {
       !['development', 'control'].includes(c.kind) || !['pass', 'hold'].includes(c.expectedDecision) ||
       !c.body?.trim() || !c.question?.trim()) ||
     (['quality', 'factual'] as const).some(g => !m.models[g] ||
-      !m.prompts[g]?.baseline || !m.prompts[g]?.candidate || m.prompts[g].baseline === m.prompts[g].candidate)) {
+      !m.prompts[g]?.baseline || !m.prompts[g]?.candidate ||
+      (!(m.qualityModels && g === 'quality') && m.prompts[g].baseline === m.prompts[g].candidate)) ||
+    (m.qualityModels !== undefined && (!m.qualityModels.baseline?.trim() || !m.qualityModels.candidate?.trim() ||
+      m.qualityModels.baseline === m.qualityModels.candidate || m.models.quality !== m.qualityModels.baseline ||
+      m.prompts.quality.baseline !== m.prompts.quality.candidate || m.cases.some(c => c.gate !== 'quality')))) {
     throw new Error('Invalid frozen gate replay manifest.');
   }
+}
+export function modelForStep(m: GateManifest, gate: Gate, arm: 'baseline' | 'candidate'): string {
+  return gate === 'quality' && m.qualityModels ? m.qualityModels[arm] : m.models[gate];
 }
 export function schedule(m: GateManifest): { key: string; case: GateCase; arm: 'baseline' | 'candidate'; repeat: number }[] {
   return m.cases.flatMap((c, i) => Array.from({ length: m.repeats }, (_, r) =>
