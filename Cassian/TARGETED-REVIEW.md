@@ -1,5 +1,7 @@
 # Cassian targeted review: local flow ready
 
+**Completed follow-up:** the owner subsequently approved the bounded trial and private-data transfer. All eight calls settled for $0.133870; [actual results and next steps](TARGETED-RESULTS.md) supersede the pending actions below. This document preserves the pre-dispatch design snapshot; no-call statements describe that earlier stage.
+
 October 11, 2026. The [parser repair and bank audit](COMPONENT-CHECK.md) merged in [#1772](https://github.com/joshpalay/Joshing-11/pull/1772). The next comparison is prepared: reuse the existing writer questions and cheap screening results, review disputed quality decisions separately, and verify the complete card against saved source passages. **This is an offline experiment, not a production writer or gate switch.** No new model calls have been made, so accuracy, usable yield and savings remain unmeasured.
 
 ## Review flow

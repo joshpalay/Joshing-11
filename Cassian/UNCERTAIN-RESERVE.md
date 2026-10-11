@@ -1,5 +1,7 @@
 # Keeping an unknown charge reserved without retrying it
 
+**Completed follow-up:** this accounting change merged in [#1774](https://github.com/joshpalay/Joshing-11/pull/1774). The owner then explicitly approved the eight-call trial and Anthropic data transfer. [All eight calls completed](TARGETED-RESULTS.md) for $0.133870; completed resume added zero calls. The old 2¢ reservation and uncertain-call state remained unchanged. The earlier approval rejection below is historical and was resolved by that explicit approval.
+
 October 11, 2026. The targeted-review code merged in [#1773](https://github.com/joshpalay/Joshing-11/pull/1773). The failed structured-output request still has an uncertain **$0.02 reservation**. No provider billing evidence was retrieved: this session has no connected billing API/admin credential, and the browser automation runtime failed before inventory. The charge has not been labeled free, settled, released or retried.
 
 The original runner's global stop blocks every new experiment when any reservation exists. The [experiment plan](PLAN.md) requires conservative unknown-cost reservations, single-runner locking, cap enforcement and prevention of duplicate spending. A separate run can preserve those requirements while carrying the old reserve inside the same $10 ceiling.
