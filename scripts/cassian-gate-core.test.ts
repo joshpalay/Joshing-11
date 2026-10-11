@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { schedule, scoreGate, validateManifest, modelForStep, type GateCase, type GateManifest } from './cassian-gate-core';
-import { qualityChallenger } from './cassian-gate-prompts';
+import { qualityChallenger, qualityRecallChallenger } from './cassian-gate-prompts';
 const c: GateCase = { id: 'case-a', gate: 'quality', kind: 'development', body: 'q=Which player?',
   question: 'Which player?', expectedDecision: 'hold', expectedReason: { allowedCodes: ['FALSE_PREMISE'] } };
 const manifest: GateManifest = { schemaVersion: 1, id: 'cassian-test', maxRunUsd: 0.75, repeats: 2,
@@ -49,5 +49,13 @@ describe('offline gate replay safeguards and scoring', () => {
   });
   it('refuses a challenger when the original rubric anchor changed', () => {
     expect(() => qualityChallenger('different rubric')).toThrow('anchor changed');
+  });
+  it('retains tier/domain policies and refuses to silently lose them', () => {
+    const policy = '5. GENERIC_AT_TIER — preserve tier\n6. MULTI_PART\n8. OFF_DOMAIN — preserve containment\n\n9. DEFINITION_SUPPLIED';
+    const revised = qualityRecallChallenger(policy);
+    expect(revised).toContain('5. GENERIC_AT_TIER — preserve tier');
+    expect(revised).toContain('8. OFF_DOMAIN — preserve containment');
+    expect(() => qualityRecallChallenger(policy.replace('8. OFF_DOMAIN', '8. RENAMED'))).toThrow('anchors changed');
+    expect(() => qualityRecallChallenger(policy.replace('5. GENERIC_AT_TIER', '5. RENAMED'))).toThrow('anchors changed');
   });
 });
