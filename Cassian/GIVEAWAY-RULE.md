@@ -1,5 +1,7 @@
 # Cassian giveaway-rule revision
 
+Follow-up: the [component check](COMPONENT-CHECK.md) rejected the third prompt revision and exposed additional failures in this second revision on selected controls. It also proposes the separate parser repair. Results and budget below are the historical second-revision snapshot.
+
 Completed October 11, 2026. The second quality-prompt revision improved the tested decisions and reasons, but **keep the production checker unchanged**. A fresh case still received a false eponym hold, and another correct hold included an incorrect multipart explanation. This is useful development evidence, not rollout validation or a reason to switch writers.
 
 The revision distinguishes the fact being asked for from context that merely identifies its subject. It checks false premises separately, requires question-text evidence for holds, permits legitimate quotation completion, and retains the existing tier and domain policies verbatim. It replaces the conflicting unique-identification definition rule rather than appending another exception. The candidate is an offline builder in `scripts/cassian-gate-prompts.ts`; production does not import it.

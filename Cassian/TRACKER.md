@@ -18,7 +18,7 @@ Updated 2026-10-11. The original Cassian implementation merged as [#1745](https:
 | --- | ---: |
 | Authorized lifetime | $10.000000 |
 | Pilot provider-response cost in CassianRun | $1.900008 |
-| Reserved/uncertain | $0 |
+| Pilot reserved/uncertain at settlement | $0 |
 | Remaining before admin grading or follow-up | $8.099992 |
 | Source retrieval within pilot | $1.319228 |
 | Both writer arms within pilot | $0.256178 |
@@ -31,9 +31,10 @@ Updated 2026-10-11. The original Cassian implementation merged as [#1745](https:
 | Quality/factual prompt replay | $0.358439 |
 | Quality checker model comparison | $0.118195 |
 | Second quality/giveaway prompt revision | $0.331854 |
-| Current connected ledger spent | $3.786119 |
-| Current connected ledger reserved/uncertain | $0 |
-| Remaining authorized lifetime | $6.213881 |
+| Third quality/component revision, including partial batch | $0.190198 |
+| Current connected ledger spent | $3.976317 |
+| Current connected ledger reserved/uncertain | $0.020000 |
+| Remaining authorized lifetime after reservations | $6.003683 |
 
 The connected database has migrations 0151–0153 applied. `CassianCandidate` holds 46 immutable snapshots, including ten second-block cards now answered and rated; both Haiku 5.5 blocks have all 22 available owner ratings. Two second-block attempts remain private for novelty exclusions; the owner answered 23 first-run cards and saved 22 overall ratings. The malformed Placeholder card was answered before its allocation fix and remains unrated; one pilot candidate was never shown. The first run made 84 calls with no unresolved reservation. The ledger, not this file, controls new spending. Response-level totals differ by about $0.000005 from six-decimal settlement rounding. Six later source-audited, nonduplicate candidates were added to shared stock at the owner's request; their Cassian review records remain separate from gameplay.
 
@@ -54,6 +55,7 @@ The executed manifest is ignored at `_scratch/Cassian/cassian-pilot-2026-10-03/p
 | C5c Gate reliability | Replay complete; both challenger prompts rejected | [Gate replay](GATE-REPLAY.md): sixteen cases, two arms, two repeats, 64 settled calls for $0.358439. Quality frozen-verdict agreement 16/20 current vs 12/20 revised; factual 8/12 vs 5/12 including one extraction failure. Human reason audit and policy/ambiguous-control sensitivity saved. Completed resume added zero calls. Production prompts unchanged. |
 | C5d Quality checker model | Complete; tested swap rejected | [Checker model comparison](CHECKER-MODELS.md): same current prompt and ten cases, two repeats/model, forty calls for $0.118195. Haiku 4.5/5.5 verdict agreement 16/20 vs 11/20; false holds 4 vs 9. Full human reason audit, native-setting limitations and policy sensitivity saved. Completed resume added zero calls. No production switch. |
 | C5e Giveaway rule | Offline revision improved; remaining failures | [Giveaway revision](GIVEAWAY-RULE.md): 88 calls on ten known and twelve fresh author-designed cases for $0.331854. Excluding the old-policy control, current/revised agreement 32/42 vs 40/42; human sound-verdict/reason 30/42 vs 38/42. Remaining eponym false hold and mixed multipart rationale; fresh controls are not an independent holdout. No production change. |
+| C5f Component check and parser | Prompt rejected; parser repair ready; paid work stopped by uncertainty | [Component check](COMPONENT-CHECK.md): 72 single-item calls, previous/third revision agreement 26/36 vs 24/36; sound verdict/reason 24/36 vs 22/36. One six-item batch returned; structured arm aborted without a response, retaining 2¢. Fourteen planned calls unstarted. Local parser repair recovers the old extraction failure, whose verdict remains wrong. No prompt/model switch or new owner cards. |
 | C6 Final report | Pending | Human quality, cost per accepted unique question, topic coverage, latency, fixed-workload monthly feasibility and budget left. |
 
 ## Current caveats
@@ -107,3 +109,5 @@ At each handoff record branch/commit, deployment SHA, candidate/exposure/review 
 - 2026-10-11: At the owner's explicit request, compared Haiku 5.5 and Haiku 4.5 as quality checker with identical current prompts and unchanged saved-case payloads. Initial automatic approval review was resolved by verifying that all ten cases had already been sent to the same Anthropic destination with owner approval; no duplicate owner approval was required. All forty calls settled for $0.118195 under a $0.50 cap, with $0 reserved. Haiku 5.5 matched 11/20 frozen decisions against 16/20 for 4.5 and held nine sound cases/repeats against four. It correctly identified the false-role defect but one rationale added a spurious multipart claim. Human audit adjusted its sound-decision/reason count from automated 11 to 10. One candidate control changed verdict between repeats; neither arm had an unsafe pass or truncation. Completed resume added no spending. Seventeen focused tests, TypeScript and lint passed; no production changes. Lifetime spending $3.454265, remaining $6.545735. PR #1768's earlier prompt-results report merged at `454d66b4d67bcb81f6fa64c693bbde6ee3d726ef`.
 
 - 2026-10-11: On branch codex/cassian-giveaway-rule from PR #1769's merged main (c29f81cd9bb468bb410888e76100171edd599e5b), completed the second offline quality-prompt revision and two frozen runs: ten known cases and twelve fresh author-designed controls, two arms and two repeats, 88 settled calls for 0.331854 USD under a combined 0.75 USD cap. Both arms used claude-haiku-4-5-20251001. Excluding the old-policy control, current/revised agreement was 32/42 versus 40/42 and human sound-verdict/reason scoring 30/42 versus 38/42; remaining eponym false hold and mixed multipart rationale prevent rollout. Fresh controls are not an independent holdout. Exact labels/replies and all per-call audits remain private. Completed resumes made no new calls or charges. Eighteen focused tests, TypeScript and affected-file lint passed. No production deployment, prompt/model/parser switch, candidate exposure, bank or gameplay writes. Existing 46 candidate snapshots and completed 22 Haiku 5.5 owner cards remain the prior handoff state; they were not re-queried for this gate-only evaluation. Ledger spending 3.786119 USD, zero reserved, 6.213881 USD remaining. See GIVEAWAY-RULE.md for full evidence and next steps.
+
+- 2026-10-11: Completed the third quality/component single-item comparison and audited every reply: previous/third revision verdict agreement 26/36 vs 24/36, sound verdict/reason 24/36 vs 22/36. Rejected the third revision. Added six-item offline mapping, frozen structured schemas and free checkpoint scoring. The first plain batch returned five correct decisions of six; the structured arm aborted at 90 seconds without a response, retaining its 2¢ reservation and stopping paid work. Seventy-three replies settled at $0.190198; lifetime $3.976317 spent, $0.02 uncertain, $6.003683 available. Repaired shared JSON extraction after prose inch marks, verified the recovered historical verdict is still wrong, and confirmed all 73 new checkpoint scores remain unchanged. No paid retry, prompt/model rollout, bank import, gameplay write or new owner rating.

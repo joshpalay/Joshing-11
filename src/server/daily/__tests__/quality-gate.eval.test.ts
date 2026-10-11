@@ -90,7 +90,10 @@ describe.skipIf(!evalsEnabled)('quality gate GENERIC_AT_TIER (live)', () => {
       const result = await findQualityFailures([
         q(
           "In American Psycho, what color is Paul Allen's business card?",
-          'bone',
+          // Paul Allen's card is off-white; "bone" describes Bateman's own card.
+          // The Harron/Turner draft (pp. 30–31) uses the earlier name Paul Owen:
+          // https://www.sellingyourscreenplay.com/wp-content/uploads/screenplay/scripts/American-Psycho.pdf
+          'off-white',
           'specialist',
           'American Psycho',
         ),
