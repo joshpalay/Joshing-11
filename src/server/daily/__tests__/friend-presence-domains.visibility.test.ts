@@ -17,6 +17,7 @@ const {
   getMutualFollowsMock,
   getKnowledgePageDataForUsersMock,
   getSectionVisibilitiesBulkMock,
+  getRestingDomainsForUsersMock,
   state,
 } = vi.hoisted(() => {
   const state = {
@@ -30,6 +31,7 @@ const {
     getFollowingMock: vi.fn(),
     getMutualFollowsMock: vi.fn(async () => [] as Array<{ id: string }>),
     getKnowledgePageDataForUsersMock: vi.fn(),
+    getRestingDomainsForUsersMock: vi.fn(async () => new Map<string, Set<string>>()),
     getSectionVisibilitiesBulkMock: vi.fn(
       async (userIds: readonly string[]) =>
         new Map(
@@ -50,6 +52,10 @@ const {
 vi.mock('@/server/db/queries/friends', () => ({
   getFollowing: getFollowingMock,
   getMutualFollows: getMutualFollowsMock,
+}));
+
+vi.mock('@/server/db/queries/daily-preferences', () => ({
+  getRestingDomainsForUsers: getRestingDomainsForUsersMock,
 }));
 
 vi.mock('@/server/db/queries/knowledge', () => ({
@@ -104,6 +110,7 @@ beforeEach(() => {
   state.sectionByFriend.clear();
   state.domainsByFriend = null;
   getMutualFollowsMock.mockResolvedValue([]);
+  getRestingDomainsForUsersMock.mockResolvedValue(new Map());
   getKnowledgePageDataForUsersMock.mockImplementation(async (userIds: readonly string[]) => {
     const map = new Map<string, DomainMastery[]>();
     for (const userId of userIds) {
@@ -359,5 +366,44 @@ describe('getFriendDomainsForBonus — activity needs a correct answer, not just
     const result = await getFriendDomainsForBonus('viewer', 5);
     expect(result.map((c) => c.domain)).toEqual(['Opera']);
     expect(result[0]?.signal).toBe('territory');
+  });
+});
+
+describe("getFriendDomainsForBonus — a friend's Never topics stay out", () => {
+  // QA 2026-10-11: C's bonus came "from Duo's world" in Catch-22, a topic Duo had
+  // set to Never. A topic the friend turned off isn't part of their world.
+  it("drops a domain the friend has set to Never (resting), case-insensitively", async () => {
+    getFollowingMock.mockResolvedValue([{ id: 'duo', displayName: 'Duo' }]);
+    state.domainsByFriend = new Map([
+      ['duo', [territoryDomain('Catch-22'), territoryDomain('Opera')]],
+    ]);
+    getRestingDomainsForUsersMock.mockResolvedValue(new Map([['duo', new Set(['catch-22'])]]));
+
+    const result = await getFriendDomainsForBonus('viewer', 5);
+    expect(result.map((c) => c.domain)).toEqual(['Opera']);
+  });
+
+  it("keeps the domain when ANOTHER friend who hasn't rested it also has it", async () => {
+    getFollowingMock.mockResolvedValue([
+      { id: 'duo', displayName: 'Duo' },
+      { id: 'bea', displayName: 'Bea' },
+    ]);
+    state.domainsByFriend = new Map([
+      ['duo', [territoryDomain('Catch-22')]],
+      ['bea', [territoryDomain('Catch-22')]],
+    ]);
+    getRestingDomainsForUsersMock.mockResolvedValue(new Map([['duo', new Set(['catch-22'])]]));
+
+    const result = await getFriendDomainsForBonus('viewer', 5);
+    expect(result.map((c) => c.domain)).toEqual(['Catch-22']);
+    // Only Bea is credited — Duo turned it off, so it isn't "from Duo's world".
+    expect(result[0]?.presenceSources.map((s) => s.userId)).toEqual(['bea']);
+  });
+
+  it('fails closed (empty pool) when the Never lookup errors', async () => {
+    getFollowingMock.mockResolvedValue([{ id: 'duo', displayName: 'Duo' }]);
+    getRestingDomainsForUsersMock.mockRejectedValue(new Error('db down'));
+
+    expect(await getFriendDomainsForBonus('viewer', 5)).toEqual([]);
   });
 });

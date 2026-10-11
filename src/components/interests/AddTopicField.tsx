@@ -53,7 +53,7 @@ type ConvergeApiCandidate = {
 // Cream / Ink-on-Cream defaults (the daily-setup surface). Overridable so the
 // same field matches differently-themed surfaces (e.g. the top-up modal).
 const DEFAULT_INPUT_CLASS =
-  'min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-sm text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] disabled:opacity-60';
+  'min-h-12 flex-1 rounded-[var(--radius-xs)] border border-[var(--accent-gold)] bg-[var(--brand-field)] px-4 text-base text-[var(--ink)] placeholder:text-[var(--text-muted-warm)]/60 focus:border-[var(--brand-navy)] disabled:opacity-60';
 const DEFAULT_BUTTON_CLASS = 'btn-ghost';
 // §4.1/§4.3 — colour only; geometry (radius, padding, size, the disabled
 // state) comes from <Chip>'s interactive form. Never re-add rounded-full,

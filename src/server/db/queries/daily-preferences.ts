@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 import { dailyPreferences, db } from '@/server/db';
 
@@ -126,4 +126,33 @@ export async function updateDailyPreferences(
     .returning();
 
   return serializePreference(preference);
+}
+
+/**
+ * Lowercased "Resting" (Never) domains for several users in ONE query. Used by the
+ * friend bonus pool: a topic a friend parked on Never isn't part of "{Name}'s
+ * world", so it must not reach anyone else's Daily Five under their name. Users
+ * with no preference row are simply absent from the map (nothing resting).
+ */
+export async function getRestingDomainsForUsers(
+  userIds: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+  if (userIds.length === 0) return result;
+  const rows = await db
+    .select({
+      userId: dailyPreferences.userId,
+      domainPreferenceFrequency: dailyPreferences.domainPreferenceFrequency,
+    })
+    .from(dailyPreferences)
+    .where(inArray(dailyPreferences.userId, [...userIds]));
+  for (const row of rows) {
+    const resting = new Set(
+      Object.entries(normalizeDomainPreferenceFrequency(row.domainPreferenceFrequency))
+        .filter(([, frequency]) => frequency === 'resting')
+        .map(([domain]) => domain.toLowerCase()),
+    );
+    if (resting.size > 0) result.set(row.userId, resting);
+  }
+  return result;
 }

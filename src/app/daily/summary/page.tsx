@@ -213,7 +213,9 @@ export default function DailySummaryPage() {
   // The app only links here once the round is done, but a bookmark, the back
   // button or a stale tab can land here mid-round (QA 2026-10-11, C1). Then the
   // header talks about the round in progress and the share score waits.
-  const stillToPlay = summary.questions.filter((q) => q.isPending).length
+  // Count only questions that have a dot, so the number matches the dots shown
+  // (a Second look has no dot; counting it said "7 still waiting" over 6 dots).
+  const stillToPlay = summary.questions.filter((q) => q.isPending && q.trackDot !== null).length
 
   // Questions from friends still waiting across the "For You"/"To You" surfaces —
   // powers the quiet nudge in the sticky footer. 0 hides the line entirely.
@@ -254,13 +256,7 @@ export default function DailySummaryPage() {
               {stillToPlay > 0 ? (
                 <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
                   {stillToPlay === 1 ? 'One question is' : `${stillToPlay} questions are`} still
-                  waiting.{' '}
-                  <Link
-                    href="/daily"
-                    className="font-medium text-[var(--brand-link)] underline underline-offset-4"
-                  >
-                    Back to the round →
-                  </Link>
+                  waiting.
                 </p>
               ) : (
                 <p className="mt-4 max-w-xl text-[1.02rem] leading-7 text-[var(--brand-ink-700)]">
@@ -358,13 +354,32 @@ export default function DailySummaryPage() {
             bottom-4 floats it off the edge; the shadow lifts it above the cards
             that scroll behind its sides. */}
         <section className="sticky bottom-4 z-20 mx-auto mt-8 max-w-xs rounded-[var(--radius-card)] border border-[var(--brand-border)] bg-[var(--brand-card)] px-5 py-4 text-center shadow-[var(--shadow-overlay)] sm:max-w-sm">
-          <p className="text-sm leading-6 text-[var(--brand-ink-700)]">
-            Five new {nextFiveAt}.
-          </p>
-          <div className="mt-3 flex flex-col items-center gap-2">
-            <Link className="btn-primary w-full" href="/" onClick={handleExitHome}>
-              Back home
-            </Link>
+          {/* Mid-round (stillToPlay > 0) the main action is finishing the round,
+              not "Five new tomorrow" + "Back home" (QA 2026-10-11, S2). */}
+          {stillToPlay > 0 ? null : (
+            <p className="mb-3 text-sm leading-6 text-[var(--brand-ink-700)]">
+              Five new {nextFiveAt}.
+            </p>
+          )}
+          <div className="flex flex-col items-center gap-2">
+            {stillToPlay > 0 ? (
+              <>
+                <Link className="btn-primary w-full" href="/daily">
+                  Back to the round
+                </Link>
+                <Link
+                  className="text-muted-foreground text-sm font-medium underline underline-offset-4 transition hover:text-foreground"
+                  href="/"
+                  onClick={handleExitHome}
+                >
+                  Back home
+                </Link>
+              </>
+            ) : (
+              <Link className="btn-primary w-full" href="/" onClick={handleExitHome}>
+                Back home
+              </Link>
+            )}
             {pendingFriendQuestions > 0 ? (
               <Link
                 className="text-sm font-medium text-[var(--brand-link)] underline underline-offset-4 transition hover:opacity-70"

@@ -114,7 +114,7 @@ export function NotForMeSheet({
           <Choice
             icon={<EyeOff className="size-5" />}
             title="Never show this question"
-            subtitle="You can bring it back from Settings › Hidden questions."
+            subtitle="You can bring it back from Hidden questions on your profile."
             disabled={busy !== null}
             busy={busy === 'hide_question'}
             onClick={() => void choose('hide_question')}

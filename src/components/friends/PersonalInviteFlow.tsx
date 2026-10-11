@@ -14,7 +14,7 @@ const ERROR_COPY: Record<string, string> = {
   invalid_invitee_display_name: 'Use a shorter, real display name.',
   invalid_suggested_interests: 'Keep each idea short and friendly.',
   invite_cooldown: 'Give this invite a little breathing room before trying again.',
-  blocked_by_viewer: 'You’ve blocked this person. Unblock them in Privacy settings first.',
+  blocked_by_viewer: 'You’ve blocked this person. Unblock them from Blocked people on your profile first.',
 }
 
 type Step = 'identity' | 'interests' | 'handoff'
