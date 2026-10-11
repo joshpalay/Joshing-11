@@ -29,7 +29,10 @@ let generationApi: typeof import('../src/server/daily/generate-questions') | nul
 let unlockRunner: (() => Promise<void>) | null = null;
 
 type Topic = { domain: string; breadth: 'broad' | 'niche' | 'very narrow'; difficulty: string };
-type Manifest = { id: string; topics: Topic[]; arms: { id: string; model: string }[] };
+type Manifest = { id: string; topics: Topic[]; arms: { id: string; model: string }[];
+  budget?: { maxRunUsd: number };
+  promptHashes?: { system: string; quality: string; factual: string;
+    byTopic: { domain: string; sha: string }[] } };
 type CallResult = {
   model: string; requestId: string | null; raw: string; stopReason: string | null;
   elapsedMs: number; usd: number; usage: {
@@ -47,6 +50,10 @@ const manifestPath = resolve(process.env.CASSIAN_MANIFEST_FILE || 'Cassian/manif
 const manifestBytes = readFileSync(manifestPath);
 const manifest = JSON.parse(manifestBytes.toString('utf8')) as Manifest;
 const manifestSha = createHash('sha256').update(manifestBytes).digest('hex');
+const runCapUsd = manifest.budget?.maxRunUsd ?? 4;
+if (!Number.isFinite(runCapUsd) || runCapUsd <= 0 || runCapUsd > 4) {
+  throw new Error('Manifest run budget must be greater than zero and at most $4.');
+}
 const privateDir = resolve('_scratch/Cassian', manifest.id);
 const checkpointPath = resolve(privateDir, 'checkpoint.json');
 const args = process.argv.slice(2);
@@ -63,7 +70,12 @@ function balancedTopics(count: number): Topic[] {
   }
   const groups = ['broad', 'niche', 'very narrow'].map((breadth) =>
     manifest.topics.filter((topic) => topic.breadth === breadth));
-  if (groups.some((group) => group.length !== 4)) throw new Error('Manifest breadth groups changed.');
+  const perBreadth = manifest.topics.length / 3;
+  if (![3, 6, 9, 12].includes(manifest.topics.length) || groups.some((group) => group.length !== perBreadth)
+    || count > manifest.topics.length
+    || new Set(manifest.topics.map((topic) => domainKey(topic.domain))).size !== manifest.topics.length) {
+    throw new Error('Manifest must contain enough distinct topics balanced across breadth.');
+  }
   const selected: Topic[] = [];
   for (let i = 0; i < count / 3; i += 1) for (const group of groups) selected.push(group[i]);
   return selected;
@@ -100,7 +112,7 @@ async function call(
   timeoutMs: number,
 ): Promise<CallResult> {
   const reservation = await reserveCall({
-    runId: manifest.id, manifestSha, key, reserveUsd,
+    runId: manifest.id, manifestSha, key, reserveUsd, runCap: runCapUsd,
   });
   if (reservation === 'already_done') {
     const prior = checkpoint.calls[key];
@@ -172,6 +184,7 @@ async function run(): Promise<void> {
       estimatedBy: 'npx tsx scripts/cassian-estimate.ts',
       paidCommand: 'Set CASSIAN_MANIFEST_FILE to the private frozen manifest, then run: npx tsx scripts/cassian-compare.ts --run --topics 3',
       paidCalls: 0,
+      runCapUsd,
     }, null, 2));
     return;
   }
@@ -189,6 +202,16 @@ async function run(): Promise<void> {
     buildRetrievalUserMessage, parseReferenceResponse, questionLeaksPassageText,
     REFERENCE_WIKI_DOMAINS, resolveReferenceSourcePreference, retrievalSystemPrompt,
   } = referenceApi;
+  if (manifest.promptHashes) {
+    for (const [name, prompt] of Object.entries({
+      system: SYSTEM_PROMPT, quality: QUALITY_GATE_SYSTEM_PROMPT, factual: FACTUAL_GATE_SYSTEM_PROMPT,
+    })) {
+      if (createHash('sha256').update(prompt).digest('hex') !==
+        manifest.promptHashes[name as 'system' | 'quality' | 'factual']) {
+        throw new Error(`Frozen ${name} prompt changed; no paid dispatch.`);
+      }
+    }
+  }
   const { wrapUserInput } = llmApi;
   const client = llmApi.getAnthropicClient();
   if (!client) throw new Error('Anthropic client is unavailable; no paid dispatch.');
@@ -209,6 +232,7 @@ async function run(): Promise<void> {
   const candidate = manifest.arms.find((arm) => arm.id === 'candidate');
   if (!baseline || !candidate) throw new Error('Two model arms are required.');
   const status = await getBudgetStatus(manifest.id); // Also verifies migration exists.
+  if (status.lifetimeReservedUsd > 0) throw new Error('Unresolved Cassian reservation; reconcile before paid dispatch.');
   console.log(`Cassian budget before dispatch: spent $${status.lifetimeSpentUsd.toFixed(4)}, reserved $${status.lifetimeReservedUsd.toFixed(4)} of $10.`);
   const hints = await getReferenceRoutingHints(topics.map((topic) => domainKey(topic.domain)));
   for (const topic of topics) {
@@ -243,6 +267,12 @@ async function run(): Promise<void> {
         new Map([[topic.domain, 'declared']]), undefined, null, undefined,
         reference ? new Map([[topic.domain, reference]]) : undefined,
       );
+      if (manifest.promptHashes) {
+        const frozen = manifest.promptHashes.byTopic.find((item) => item.domain === topic.domain);
+        if (!frozen || createHash('sha256').update(userPrompt).digest('hex') !== frozen.sha) {
+          throw new Error('Frozen writer prompt changed; no paid dispatch.');
+        }
+      }
       const generation = await call(checkpoint, client, `writer:${candidateKey}`, 0.35, {
         model: arm.model, max_tokens: arm.model === 'claude-haiku-5-5' ? 3000 : 2000,
         temperature: 0.8,

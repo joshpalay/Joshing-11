@@ -16,6 +16,7 @@ type Manifest = {
   requestedPerTopicPerArm: number;
   arms: { id: string; model: string }[];
   topics: Topic[];
+  budget?: { maxRunUsd: number };
 };
 
 const manifest = JSON.parse(readFileSync(resolve(process.env.CASSIAN_MANIFEST_FILE || 'Cassian/manifest.json'), 'utf8')) as Manifest;
@@ -27,13 +28,13 @@ const counts = new Map<string, number>();
 for (const topic of manifest.topics) counts.set(topic.breadth, (counts.get(topic.breadth) ?? 0) + 1);
 if (
   manifest.schemaVersion !== 1 ||
-  manifest.topics.length !== 12 ||
+  ![3, 6, 9, 12].includes(manifest.topics.length) || selectedTopics > manifest.topics.length ||
   manifest.requestedPerTopicPerArm !== 1 ||
   manifest.arms.length !== 2 ||
-  new Set(manifest.topics.map((topic) => topic.domain.toLowerCase())).size !== 12 ||
-  ['broad', 'niche', 'very narrow'].some((breadth) => counts.get(breadth) !== 4)
+  new Set(manifest.topics.map((topic) => topic.domain.toLowerCase())).size !== manifest.topics.length ||
+  ['broad', 'niche', 'very narrow'].some((breadth) => counts.get(breadth) !== manifest.topics.length / 3)
 ) {
-  throw new Error('Cassian manifest must have two arms and 4 distinct topics per breadth.');
+  throw new Error('Cassian manifest must have two arms and enough distinct topics balanced across breadth.');
 }
 
 const baseline = manifest.arms.find((arm) => arm.id === 'baseline')?.model;
@@ -79,7 +80,8 @@ const gates = (
   priced(QUALITY_GATE_MODEL, qualityUsage) + priced(FACTUAL_GATE_MODEL, factualUsage)
 ) * questionsPerArm * 2;
 const observedShape = source + writerA + writerB + gates;
-const firstSubcap = 4;
+const firstSubcap = manifest.budget?.maxRunUsd ?? 4;
+if (!Number.isFinite(firstSubcap) || firstSubcap <= 0 || firstSubcap > 4) throw new Error('Invalid frozen run cap.');
 const totalCap = 10;
 
 console.log(JSON.stringify({
@@ -88,7 +90,7 @@ console.log(JSON.stringify({
   topics: totalTopics,
   sourceMode: reuseSources ? 'saved reference packets; zero new retrieval calls' : 'new retrieval',
   requestedQuestions: questionsPerArm * 2,
-  priceSource: 'repository pricing catalog; independently confirm provider bill before paid dispatch',
+  priceSource: 'repository pricing catalog; list-price estimates are not provider invoices',
   usageSource: '14-day LlmUsageEvent averages frozen 2026-10-03',
   estimatedUsd: {
     sourceRetrieval: +source.toFixed(3), writerBaseline: +writerA.toFixed(3),
