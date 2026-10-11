@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { assertReviewBudgetClear, planTargetedReview, scoreTargetedReview, validateTargetedManifest, type ReviewReply } from './cassian-targeted-core';
 import { estimateCostUsd } from '../src/server/llm/pricing';
-import { acquireRunnerLock, closeBudgetPool, getBudgetStatus, reserveCall, settleCall } from '../src/server/cassian/budget';
+import { acquireRunnerLock, closeBudgetPool, getBudgetStatus, getUnrelatedUncertainReserveUsd, reserveCall, settleCall } from '../src/server/cassian/budget';
 
 async function main() {
   if (!process.env.CASSIAN_MANIFEST_FILE) throw new Error('Set CASSIAN_MANIFEST_FILE to the frozen private targeted-review manifest.');
@@ -55,7 +55,10 @@ async function main() {
   const unlock = await acquireRunnerLock();
   try {
     const before = await getBudgetStatus(manifest.id);
-    assertReviewBudgetClear(before.lifetimeReservedUsd);
+    const carriedUncertaintyUsd = await getUnrelatedUncertainReserveUsd(manifest.id);
+    assertReviewBudgetClear(before.lifetimeReservedUsd, carriedUncertaintyUsd, before.reservedUsd);
+    console.log(JSON.stringify({ retainedUnrelatedUncertaintyUsd: carriedUncertaintyUsd,
+      availableAfterReservationsUsd: 10 - before.lifetimeSpentUsd - before.lifetimeReservedUsd }));
     const llm = await import('../src/lib/llm');
     const client = llm.getAnthropicClient();
     if (!client) throw new Error('Anthropic client unavailable.');
@@ -102,8 +105,10 @@ async function main() {
         throw error;
       }
       await settleCall({ runId: manifest.id, key: step.key, actualUsd: usd });
+      console.log(JSON.stringify({ key: step.key, usd, elapsedMs: checkpoint.calls[step.key].elapsedMs }));
       const after = await getBudgetStatus(manifest.id);
-      if (after.lifetimeReservedUsd > 0 || usd > 0.15) throw new Error('Review accounting halted further dispatch.');
+      assertReviewBudgetClear(after.lifetimeReservedUsd, await getUnrelatedUncertainReserveUsd(manifest.id), after.reservedUsd);
+      if (usd > 0.15) throw new Error('Review accounting halted further dispatch.');
     }
     score();
   } finally {

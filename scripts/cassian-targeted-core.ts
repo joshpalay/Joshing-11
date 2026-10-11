@@ -33,8 +33,10 @@ export type ReviewStep = { key: string; kind: 'quality' | 'factual'; ids: string
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const normalized = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
-export function assertReviewBudgetClear(reservedUsd: number): void {
-  if (!Number.isFinite(reservedUsd) || reservedUsd !== 0) throw new Error('Unresolved reservation; stop before dispatch.');
+export function assertReviewBudgetClear(reservedUsd: number, carriedUncertaintyUsd = 0, ownReservedUsd = 0): void {
+  if ([reservedUsd, carriedUncertaintyUsd, ownReservedUsd].some(n => !Number.isFinite(n) || n < 0) ||
+    ownReservedUsd !== 0 || Math.abs(reservedUsd - carriedUncertaintyUsd) > 1e-9)
+    throw new Error('Active, same-run or unaccounted reservation; stop before dispatch.');
 }
 
 export function targetedRequestHashes(manifest: TargetedManifest): { key: string; sha: string }[] {
