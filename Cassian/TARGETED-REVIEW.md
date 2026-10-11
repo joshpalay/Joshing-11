@@ -1,0 +1,48 @@
+# Cassian targeted review: local flow ready
+
+October 11, 2026. The [parser repair and bank audit](COMPONENT-CHECK.md) merged in [#1772](https://github.com/joshpalay/Joshing-11/pull/1772). The next comparison is prepared: reuse the existing writer questions and cheap screening results, review disputed quality decisions separately, and verify the complete card against saved source passages. **This is an offline experiment, not a production writer or gate switch.** No new model calls have been made, so accuracy, usable yield and savings remain unmeasured.
+
+## Review flow
+
+1. Retain both known novelty exclusions. Code checks also reject empty text and later exact-question/fact duplicates across the complete cohort. They do not infer semantic novelty from names or topic overlap. Unknown novelty cannot become a pass.
+2. Route every remaining quality hold or invalid quality response to a fresh Sonnet 5.5 assessment. Audit a deterministic sample of quality passes: nominally 25%, with at least one per eligible batch. The actual frozen sample has four passes. The reviewer receives question, reference answer/variants, domain and tier; it receives no first-review reason, explanation, source audit, owner rating or writer identity.
+3. Independently verify each remaining card's question, answer and explanation against its original saved source passage using Sonnet 5.5. This replaces the factual-checking stage in the candidate comparison; it does not remove factual verification after a quality hold is cleared. The factual reviewer receives no quality decision or expected source label.
+4. Derive the final decision from assessment fields. Established defects hold; uncertainty, missing evidence or invalid replies require review; a pass needs factual support plus the applicable quality approval. A quality approval cannot overrule a factual contradiction, unknown source support or novelty exclusion.
+
+The quality reviewer describes the requested fact, request groups, disclosure evidence and independent defects. It does not emit a binary verdict or drop list. Code requires exact question quotes, checks that a literal-disclosure quote prints a full reference answer/variant rather than merely a surname or partial-word match, and requires different groups for multipart findings. The retained tier/domain policies come from the existing production rubric. This reduces contradictory verdict fields; it does not prove a semantic disclosure inference or subjective quality judgment is correct.
+
+The factual reviewer separately reports supported/contradicted/unknown for all three fields, with exact quotations and source IDs for supported or contradicted claims. Code checks quotation membership in that item's source. It cannot prove citation entailment, coverage of every claim or source truth. Missing information is unknown, not a contradiction. Empty/invented evidence, incomplete or duplicate IDs, extra fields, malformed JSON, truncation, refusal and nonfinal replies cannot release an item.
+
+## Frozen comparison
+
+The cohort preserves all **24 original attempts** from the two writer blocks, all **22 existing owner ratings**, both novelty exclusions and all original writing/checking costs. Four mixed batches contain up to six items each, alternating writer allocation across topics; each batch has one item per topic. IDs are generic in reviewer requests, and model/owner/source labels remain private.
+
+| Planned work | Items | Requests |
+| --- | ---: | ---: |
+| Fresh quality review: seven holds plus four sampled passes | 11 | 4 |
+| Source-backed question/answer/explanation verification | 22 | 4 |
+| Total new calls | — | **8** |
+
+Both reviewers use `claude-sonnet-5-5`, 3,000 output tokens, a 30-second timeout and zero SDK retries. Plain JSON is requested; API structured output is not used in this trial. The plan estimate is **$0.211860**, not a charge or guarantee; output length, tokenization and cache effects can differ. The frozen run ceiling is **$0.75**, within the existing lifetime cap. Each actual dispatch requires a durable $0.15 reservation, checkpoint persistence and settlement; uncertainty or an over-reservation response stops further dispatch. These larger per-call reservations cover the longer source/evidence responses, not an increase to the lifetime cap.
+
+The manifest freezes questions, sources, labels, grouping, sampling seed, prompts, models, response limits and request fingerprints. The runner refuses changed requests or a checkpoint hash mismatch. The initial local draft is preserved; a final v1 under a new run ID added request fingerprints and response limits before any reviewer dispatch. Labels, data, prompts and routing were unchanged.
+
+Source-Keep plus historical novelty eligibility defines technical usable ground truth. Owner Good is reported separately, including its overlap with source-supported passes; it never certifies truth. The previously documented post-review explanation correction is retained as Revise without rewriting the original audit. One old-definition-policy Reject is marked sensitive, with a separate non-Keep-pass sensitivity. Revise can mean insufficient support, so a non-Keep pass is not necessarily a proved factual error.
+
+Replaying the stored baseline yields three source-Keep/novel passes for Sonnet and four for Haiku, of which three per arm were also owner Good. Two Sonnet and three Haiku machine passes were not source-Keep. Each writer had one source-Keep question held by quality screening. These describe this known, selected cohort; they are not new production accuracy estimates. The earlier conservative four-per-arm Good/source-supported original count and three-per-arm machine-passed count use different denominators and remain intact.
+
+## Economics and limits
+
+The candidate counts original writer and cheap-screening costs for every attempt, including exclusions, then replaces historical factual cost with measured source verification and adds targeted quality-review cost. Mixed-batch review costs are attributed in proportion to reviewed item counts; this is an allocation convention, not per-item token measurement. Cost per verified usable pass remains null for an incomplete comparison or zero usable yield. Good holds, good unresolved items and non-Keep passes remain separate, so withholding everything cannot appear to be a quality win.
+
+Latency is explicitly **modeled core time**: writer plus the maximum of cheap screening followed by any quality review, and factual verification. The CLI dispatches sequentially for accounting and recovery; it does not measure a deployed parallel pipeline, full queue readiness or cold topic retrieval. No replacement-generation requests are scheduled. Before a live writer trial, add measured replacement/retrieval cost and topic coverage; this saved-question experiment alone cannot establish full operating savings.
+
+The saved passages often do not directly support the generated fact or all explanation claims. This test may therefore leave correct cards unresolved. That is a source-coverage limitation rather than evidence of falsity. If it dominates, improve source provenance and constrain unsupported writer claims before adding more judge votes. The same reviewer designed this flow and prepared the known-case labels; no blind independent holdout or statistical independence between models is claimed. Actual review reasons still need human/source audit before a rollout.
+
+## Verification and next action
+
+**35 focused tests** across four files passed, covering false-hold rescue, factual contradictions, uncertainty, quotation boundaries, same-kind grouping, stable sampling, missing/duplicate IDs, source evidence, truncation/refusal, cost attribution, request drift and budget blocking. TypeScript, affected-file lint and diff checks passed. Local replay over all 24 saved IDs verified routing and exclusion handling; deliberately malformed mock replies could not release any item. Default planning and `--score-only` ran with database/API/environment-file variables unset; score-only refuses paid flags. Mock checks demonstrate orchestration, not reviewer accuracy.
+
+The final private manifest is `_scratch/Cassian/cassian-targeted-review-v1-2026-10-11/private/manifest.json`, SHA-256 `1ee7dd22df2d79964e06be684fa19acd5016e6cc18b4bb77fce466b9cae03690`. Provenance preserves source/checkpoint/audit hashes, the correction, sampling and request hashes. Exact questions, passages, labels and local artifacts stay ignored. Set `CASSIAN_MANIFEST_FILE` to that file, then use `npx tsx scripts/cassian-targeted-review.ts` for a free plan or add `--score-only` for free saved-reply scoring. Paid execution requires `--run`/`--resume` and the unchanged shared ledger guard; neither was attempted here.
+
+The ledger remains **$3.976317 spent, $0.02 reserved/uncertain, $6.003683 available**. The earlier timed-out request still needs provider billing evidence before another paid dispatch. No new writer cards, owner ratings, bank/gameplay writes, migrations or production gate changes occurred. Next reconcile that reservation, run this frozen comparison and audit its decisions/evidence; move to a bounded live writer trial only if the complete pipeline earns it.
