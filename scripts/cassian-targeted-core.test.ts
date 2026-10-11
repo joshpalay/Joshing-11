@@ -136,4 +136,10 @@ describe('offline targeted pipeline', () => {
     assertReviewBudgetClear(0);
     for (const value of [0.02, -0.01, NaN, Infinity]) expect(() => assertReviewBudgetClear(value)).toThrow('stop before dispatch');
   });
+  it('can carry fully retained unrelated uncertainty but blocks own or active reservations', () => {
+    assertReviewBudgetClear(0.02, 0.02, 0);
+    expect(() => assertReviewBudgetClear(0.03, 0.02, 0)).toThrow('stop before dispatch');
+    expect(() => assertReviewBudgetClear(0.02, 0.02, 0.02)).toThrow('stop before dispatch');
+    expect(() => assertReviewBudgetClear(0.02, 0.03, 0)).toThrow('stop before dispatch');
+  });
 });

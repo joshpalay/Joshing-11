@@ -43,6 +43,11 @@ describe('Cassian reservation recovery', () => {
     await expect(reserveCall({ ...request, manifestSha: 'changed' })).rejects.toThrow('manifest changed');
     expect(db.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE'))).toBe(false);
   });
+  it('never resumes a halted failed run even when another run can carry its reservation', async () => {
+    db.row!.status = 'halted';
+    await expect(reserveCall(request)).rejects.toThrow('run is halted');
+    expect(db.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE'))).toBe(false);
+  });
   it('retains the ceiling and halts the run when a provider charge is unknown', async () => {
     db.row!.calls = { [request.key]: { status: 'reserved', reservedUsd: 0.35 } };
     await settleCall({ runId: 'test', key: request.key, actualUsd: null, reason: 'provider timeout' });

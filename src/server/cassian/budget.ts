@@ -171,6 +171,34 @@ export async function getBudgetStatus(runId: string): Promise<{
   }
 }
 
+type CarryRun = { id: string; status: string; reservedUsd: number; calls: Calls };
+
+/** Only carry fully reserved uncertainty from OTHER halted runs, never an active or same-run call. */
+export function unrelatedUncertainReserveUsd(rows: CarryRun[], runId: string): number {
+  return rows.reduce((sum, row) => {
+    if (row.id === runId || row.status !== 'halted' || !Number.isFinite(row.reservedUsd) || row.reservedUsd <= 0 ||
+      !row.calls || typeof row.calls !== 'object' || Array.isArray(row.calls)) return sum;
+    const steps = Object.values(row.calls);
+    if (steps.some(step => !step || !['done', 'uncertain'].includes(step.status) ||
+      !Number.isFinite(step.reservedUsd) || step.reservedUsd <= 0 ||
+      (step.status === 'done' ? !Number.isFinite(step.actualUsd) || step.actualUsd! < 0 : step.actualUsd !== undefined))) return sum;
+    const uncertain = steps.filter(step => step.status === 'uncertain').reduce((n, step) => n + step.reservedUsd, 0);
+    return uncertain > 0 && Math.abs(uncertain - row.reservedUsd) < 1e-9 ? sum + row.reservedUsd : sum;
+  }, 0);
+}
+
+/** Read-only classification. Does not settle, release, resume or modify any failed run. */
+export async function getUnrelatedUncertainReserveUsd(runId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query<RunRow>(
+      'SELECT * FROM "CassianRun" WHERE id <> $1 AND status = \'halted\' AND reserved_usd > 0', [runId],
+    );
+    return unrelatedUncertainReserveUsd(result.rows.map(row => ({ id: row.id, status: row.status,
+      reservedUsd: Number(row.reserved_usd), calls: row.calls })), runId);
+  } finally { client.release(); }
+}
+
 /** A session advisory lock permits one paid CLI runner without a long transaction. */
 export async function acquireRunnerLock(): Promise<() => Promise<void>> {
   const client = await getPool().connect();
