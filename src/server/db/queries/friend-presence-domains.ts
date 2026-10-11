@@ -20,6 +20,7 @@
 
 import { getKnowledgePageDataForUsers, type DomainMastery } from '@/server/db/queries/knowledge';
 import { getFollowing, getMutualFollows } from '@/server/db/queries/friends';
+import { getRestingDomainsForUsers } from '@/server/db/queries/daily-preferences';
 import { selectRecentlyExploring } from '@/server/profile/recently-exploring';
 import {
   canViewSection,
@@ -267,10 +268,20 @@ export async function getFriendDomainsForBonus(
   // old per-friend `.catch(() => ({ allDomains: [] }))` gave each fetch.
   // The viewer rides along in the SAME batched query as the friends (one extra
   // row, no extra round-trip) so their own map can be subtracted below.
-  const domainsByUser = await getKnowledgePageDataForUsers([
-    ...visibleFriends.map((f) => f.id),
-    viewerUserId,
-  ]).catch(() => new Map<string, DomainMastery[]>());
+  const [domainsByUser, restingByFriend] = await Promise.all([
+    getKnowledgePageDataForUsers([
+      ...visibleFriends.map((f) => f.id),
+      viewerUserId,
+    ]).catch(() => new Map<string, DomainMastery[]>()),
+    // Each friend's own "Never" (resting) topics. A topic the friend parked on
+    // Never isn't part of their world, so it never reaches anyone else's round
+    // as "from {Name}'s world" (QA 2026-10-11: a friend's Never topic surfaced
+    // as a bonus). Fails CLOSED: if this lookup errors we can't tell which
+    // topics a friend turned off, so the pool is empty (clean 5) rather than
+    // risk broadcasting one.
+    getRestingDomainsForUsers(visibleFriends.map((f) => f.id)).catch(() => null),
+  ]);
+  if (restingByFriend === null) return [];
 
   // *** The viewer's OWN domains — subtracted from the pool. ***
   // This is what makes the "friend-sourced only" invariant above real; it was
@@ -289,6 +300,7 @@ export async function getFriendDomainsForBonus(
   const contributions: FriendDomainContribution[] = [];
   for (const friend of visibleFriends) {
     const allDomains = domainsByUser.get(friend.id) ?? [];
+    const friendResting = restingByFriend.get(friend.id);
     const activityDomains = new Set(
       selectRecentlyExploring(allDomains).map((d) => d.domain.toLowerCase()),
     );
@@ -297,6 +309,7 @@ export async function getFriendDomainsForBonus(
       const key = domain.domain.toLowerCase();
       if (excludeDomains.has(key)) continue;
       if (ownDomains.has(key)) continue;
+      if (friendResting?.has(key)) continue;
       const inTerritory = isTerritoryDomain(domain);
       const inActivity = !domain.isHidden && hasEarnedActivity(domain) && activityDomains.has(key);
       if (!inTerritory && !inActivity) continue;

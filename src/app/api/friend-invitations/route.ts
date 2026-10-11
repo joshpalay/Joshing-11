@@ -689,7 +689,7 @@ export async function POST(request: Request) {
           {
             error: 'blocked_by_you',
             message:
-              'You’ve blocked this person. Unblock them in Privacy settings first.',
+              'You’ve blocked this person. Unblock them from Blocked people on your profile first.',
           },
           { status: 409 }
         )
