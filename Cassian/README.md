@@ -4,6 +4,8 @@ Cassian is the current home for the experiment previously called QEXP-01. This f
 
 Status: the [approved targeted-review trial](TARGETED-RESULTS.md) completed all eight calls for $0.133870. It cleared two quality false holds but released neither card, left fifteen attempts unresolved and still passed a flawed explanation. Improve source coverage and claim support before another pipeline trial; keep production writer/checkers unchanged. All 22 available writer-trial cards are answered and rated; no more owner ratings are needed. Six separately vetted pilot questions were added to the shared bank at the owner's request; neither new writer block was promoted. The [accounting follow-up](UNCERTAIN-RESERVE.md) keeps the older uncertain 2¢ reserved and its run halted. Lifetime spending is $4.110187, with $5.869813 available after reservations. The [bank follow-up](BANK-SUPPLY.md) covers 21 builds without establishing savings; placement attribution remains open. See [next steps](NEXT-STEPS.md) and [tracker](TRACKER.md).
 
+Free follow-up complete: the [source audit](SOURCE-COVERAGE.md) found that saved summaries support only six of 22 requested answers and one complete card under a strict reading. Actual page captures and a three-case development prototype are now saved privately, with an [offline evidence contract](EVIDENCE-CONTRACT.md). Independent claim/quality review and unseen controls come next; the prototype has not had a writer/checker API test and is not new bank stock.
+
 ## Confirmed owner decisions
 
 - Admin-only, visibly distinct experiment in Daily Five after the bonus questions.
