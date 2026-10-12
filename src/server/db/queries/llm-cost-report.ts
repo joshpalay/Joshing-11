@@ -320,7 +320,7 @@ export async function readSurfaceLatency(startDaysAgo: number, endDaysAgo = 0): 
 
 // ─── Volume denominators (O1) ────────────────────────────────────────────────
 
-/** Count of bot questions generated in the trailing window — denominator for cost/question. */
+/** Saved question rows created in the window, including bank copies; a reporting proxy, not fresh usable yield. */
 async function countQuestionsGenerated(startDaysAgo: number): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -495,22 +495,19 @@ export function renderCostLatencyReportMarkdown(r: CostLatencyReport): string {
   }
   lines.push('');
 
-  // Cost per unit (only when a clean denominator exists, per O1).
+  // Generation spend per saved row; fresh usable yield needs attempt-to-serving lineage.
   lines.push('## Cost per unit');
   lines.push('');
   if (r.costPerQuestionUsd != null) {
     lines.push(
-      `- Cost to *write* a question: **${usd(r.costPerQuestionUsd)}** (${r.questionsGenerated.toLocaleString('en-US')} generated)`,
+      `- Generation spend per saved question: **${usd(r.costPerQuestionUsd)}** (${r.questionsGenerated.toLocaleString('en-US')} saved)`,
     );
-    // Honesty guard: this is the 'generate' bucket alone. Gating and the
-    // post-hoc verification sweep are the majority of spend and are NOT in
-    // this number, so reading it as all-in cost-per-question understates the
-    // true figure by roughly an order of magnitude.
+    // This ratio excludes checks/retrieval and its denominator may include reuse.
     lines.push(
-      '  - Generation only — excludes quality gating and fact-checking, which are most of the spend. Not the all-in cost of a question.',
+      '  - Generation spend divided by question rows saved this period, including bank copies. Excludes retrieval and checks; not the all-in cost of a new usable question.',
     );
   } else {
-    lines.push('- Cost to write a question: no questions generated this week.');
+    lines.push('- Generation spend per saved question: no question rows saved this week.');
   }
   if (r.costPerAnswerGradedUsd != null) {
     lines.push(

@@ -140,11 +140,11 @@ export function LlmCostReportReadout({ data }: { data: CostReportData }) {
             <h3 className="mb-2 text-sm font-semibold">Cost per unit</h3>
             <ul className="text-sm">
               <li className="flex items-baseline justify-between gap-3">
-                <span>Per question generated</span>
+                <span>Generation spend per saved question</span>
                 <span className="text-muted-foreground tabular-nums">
                   {report.costPerQuestionUsd != null
-                    ? `${usd(report.costPerQuestionUsd)} · ${num(report.questionsGenerated)} made`
-                    : 'no questions generated'}
+                    ? `${usd(report.costPerQuestionUsd)} · ${num(report.questionsGenerated)} saved`
+                    : 'no question rows saved'}
                 </span>
               </li>
               <li className="flex items-baseline justify-between gap-3">
@@ -156,6 +156,10 @@ export function LlmCostReportReadout({ data }: { data: CostReportData }) {
                 </span>
               </li>
             </ul>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Generation spend divided by question rows saved this period, including bank copies.
+              Excludes retrieval and checks; not the all-in cost of a new usable question.
+            </p>
           </div>
 
           {/* ── Speed ── */}

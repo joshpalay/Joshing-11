@@ -211,8 +211,8 @@ export function buildCostReportEmailTemplate(params: {
 
   const perQuestion =
     r.costPerQuestionUsd != null
-      ? `${usd(r.costPerQuestionUsd)} <span style="color:${INK_FAINT};">· ${num(r.questionsGenerated)} made</span>`
-      : `<span style="color:${INK_FAINT};">no questions generated</span>`;
+      ? `${usd(r.costPerQuestionUsd)} <span style="color:${INK_FAINT};">· ${num(r.questionsGenerated)} saved</span>`
+      : `<span style="color:${INK_FAINT};">no question rows saved</span>`;
   const perGrade =
     r.costPerAnswerGradedUsd != null
       ? `${usd(r.costPerAnswerGradedUsd)} <span style="color:${INK_FAINT};">· ${num(r.answersGraded)} graded</span>`
@@ -250,8 +250,8 @@ export function buildCostReportEmailTemplate(params: {
               </td></tr>
 
               ${eyebrow('Cost per unit')}
-              <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Cost to write a question — ${perQuestion}</td></tr>
-              <tr><td style="font-family:${SANS};font-size:12px;line-height:1.5;color:${INK_FAINT};padding:0 0 6px 0;">Generation only — excludes quality gating and fact-checking, which are most of the spend. Not the all-in cost of a question.</td></tr>
+              <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Generation spend per saved question — ${perQuestion}</td></tr>
+              <tr><td style="font-family:${SANS};font-size:12px;line-height:1.5;color:${INK_FAINT};padding:0 0 6px 0;">Generation spend divided by question rows saved this period, including bank copies. Excludes retrieval and checks; not the all-in cost of a new usable question.</td></tr>
               <tr><td style="font-family:${SERIF};font-size:15px;color:${INK};padding:2px 0;">Per answer graded — ${perGrade}</td></tr>
 
               ${eyebrow('How long players wait')}
