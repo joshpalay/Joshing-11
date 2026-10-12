@@ -1,6 +1,8 @@
 # Cassian — question creation experiment
 
-Latest stage: the [separate adjudication](EVIDENCE-ADJUDICATION.md) and [v3 offline contract repair](EVIDENCE-V3.md) are complete. The fourteen-call trial remains completed at $0.127014, with frozen scores unchanged. Saved cases verify citation/source-span mechanics and mandatory relation regressions; this is no new model reliability result. Next prepare the [fresh 24-topic comparison](EVIDENCE-EVALUATION-PLAN.md), freeze concrete selection/scoring and budget before dispatch, then measure the complete task including evidence labor. No new paid calls or production change.
+**October 12 preparation update:** priority #1780 merged. The [fresh comparison](FRESH-PREPARATION.md) now has 23 frozen topic requests and captured source leads, plus tested full creation-cost accounting. The missing broad/depleted slot is recorded, not substituted. Fact/novelty review, blind controls, final payload/budget bounds and dispatch integration remain before paid execution. No new model spending.
+
+Previous completed stage: the [separate adjudication](EVIDENCE-ADJUDICATION.md) and [v3 offline contract repair](EVIDENCE-V3.md) are complete. The fourteen-call trial remains completed at $0.127014, with frozen scores unchanged. Saved cases verify citation/source-span mechanics and mandatory relation regressions; this is no new model reliability result. Next prepare the [fresh 24-topic comparison](EVIDENCE-EVALUATION-PLAN.md), freeze concrete selection/scoring and budget before dispatch, then measure the complete task including evidence labor. No new paid calls or production change.
 
 Cassian is the current home for the experiment previously called QEXP-01. This folder supersedes the implementation scope in `docs/experiments/question-quality-v1/`; those documents remain background and provenance, not an instruction to build the earlier platform.
 
