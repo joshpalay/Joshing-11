@@ -1,6 +1,6 @@
 # Cassian: fresh comparison and complete-task measurement
 
-October 12, 2026. The [v3](EVIDENCE-V3.md) selection/scoring/measurement protocol now has concrete [bounded dispatch](FRESH-DISPATCH.md), the 23-request frame and prepared source/gold. Token preflight and execution are pending. Maximum reservations $3.9764 under $4; fresh available budget $5.742799 inside the $10 lifetime cap after unchanged 2¢ uncertainty. See [selection](FRESH-PREPARATION.md) and [evidence/controls](FRESH-EVIDENCE.md).
+October 12, 2026. **The frozen v3 comparison completed:** [101 calls settled for $0.963987; neither arm yielded a complete pass](FRESH-RESULTS.md). Strict output exhaustion and source-response contract failures prevent an instruction-reliability or usable-unit-cost comparison. The original prospective protocol below remains the interpretation frame, not an instruction to rerun it. Selection/source/gold are unchanged, independent adjudication remains unassigned, and $4.778812 remains inside the $10 lifetime cap after unchanged 2¢ uncertainty. Next repair response compatibility offline, then freeze a small compatibility probe before another topic comparison.
 
 ## Fresh comparison: 24 topic requests
 

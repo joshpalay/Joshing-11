@@ -1,6 +1,8 @@
 # Cassian: fresh comparison preparation
 
-October 12, 2026, after the owner-requested merge of [#1780](https://github.com/joshpalay/Joshing-11/pull/1780) at `f7e2f457`. [Creation unit cost](COST-PRIORITY.md) remains primary. **Selection, source/novelty preparation and development controls are prepared; the paid comparison is not yet dispatch-ready.** The [evidence follow-up](FRESH-EVIDENCE.md) records 38 available relationships across 22 of the original 23 requests, eight sound/eight challenge controls and three mandatory regressions. No new model calls, owner ratings or bank/gameplay writes.
+**Execution update, October 12:** the [fresh comparison and separate audit are complete](FRESH-RESULTS.md); 101 calls settled for $0.963987 and neither arm yielded a deliverable question. Sources and the selection below remain unchanged. Current work is offline response-contract repair, not another execution of this study.
+
+**Historical preparation snapshot:** October 12, after the owner-requested merge of [#1780](https://github.com/joshpalay/Joshing-11/pull/1780) at `f7e2f457`. [Creation unit cost](COST-PRIORITY.md) remains primary. Selection, source/novelty preparation and development controls were prepared; dispatch was not yet ready at that snapshot. The [evidence follow-up](FRESH-EVIDENCE.md) records 38 available relationships across 22 of the original 23 requests, eight sound/eight challenge controls and three mandatory regressions. This preparation phase added no model calls, owner ratings or bank/gameplay writes.
 
 ## Frozen sampling frame
 
