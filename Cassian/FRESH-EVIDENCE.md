@@ -1,6 +1,6 @@
 # Cassian: fresh evidence and controls
 
-**Execution update, October 12:** the [fresh comparison and separate audit are complete](FRESH-RESULTS.md); 101 calls settled for $0.963987 and neither arm yielded a deliverable question. The evidence, development gold and original preparation labels below remain unchanged; later audit uncertainties are recorded separately.
+**Execution update, October 12:** the [fresh comparison and separate audit are complete](FRESH-RESULTS.md); 101 calls settled for $0.963987 and neither arm yielded a deliverable question. The subsequent [v4 compatibility probe](COMPATIBILITY-RESULTS.md) has also completed; valid replies expose remaining formation, inventory and supplied-evidence failures. The evidence, development gold and original preparation labels below remain unchanged; later audit uncertainties are recorded separately.
 
 **Historical preparation snapshot:** October 12, following [#1781](https://github.com/joshpalay/Joshing-11/pull/1781) at `2e5e1033`. The [23-request selection](FRESH-PREPARATION.md) was unchanged. Source/novelty preparation and the development control set were complete; paid execution was not ready at that snapshot. This preparation phase added no provider calls, database activity, bank promotion or production gate change. Creation cost per new usable unique question remains primary.
 

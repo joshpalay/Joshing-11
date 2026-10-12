@@ -1,6 +1,6 @@
 # Cassian: fresh comparison and complete-task measurement
 
-October 12, 2026. **The frozen v3 comparison completed:** [101 calls settled for $0.963987; neither arm yielded a complete pass](FRESH-RESULTS.md). Strict output exhaustion and source-response contract failures prevent an instruction-reliability or usable-unit-cost comparison. The original prospective protocol below remains the interpretation frame, not an instruction to rerun it. Selection/source/gold are unchanged, independent adjudication remains unassigned, and $4.778812 remains inside the $10 lifetime cap after unchanged 2¢ uncertainty. Next repair response compatibility offline, then freeze a small compatibility probe before another topic comparison.
+October 12, 2026. **V3 and the subsequent v4 compatibility probe are complete:** [v3's 101 calls](FRESH-RESULTS.md) settled $0.963987 with no deliverable yield; [v4's eighteen known-case calls](COMPATIBILITY-RESULTS.md) settled $0.290390 with valid replies throughout, but the formation regression still escapes. Strict claim omissions/span false alarms and a source-evidence waiver also remain. Next repair semantic coverage/source-packet completeness offline before further paid comparison. The original prospective protocol below is historical; do not rerun it. Original selection/source/gold/scores remain unchanged; independent adjudication unassigned. Current lifetime available is $4.488422 after the unchanged 2¢ uncertainty inside the $10 cap.
 
 ## Fresh comparison: 24 topic requests
 

@@ -2,6 +2,8 @@
 
 October 12, 2026. **Execution and the separate author audit are complete:** [101 calls settled for $0.963987](FRESH-RESULTS.md), within the approved $4 cap. Neither arm produced a complete pipeline pass. The owner approved the specific private transfer here; no approval is pending for this completed run. [#1783](https://github.com/joshpalay/Joshing-11/pull/1783) merged at `95d17e0a`. The original [23-request frame and evidence/control gold](FRESH-EVIDENCE.md) remain unchanged. The configuration below records the executed design; it is not an instruction to rerun it.
 
+**Later follow-up:** [v4 compatibility probe completed](COMPATIBILITY-RESULTS.md), eighteen calls/$0.290390 settled. Current contract/next steps are in [EVIDENCE-V4.md](EVIDENCE-V4.md) and [NEXT-STEPS.md](NEXT-STEPS.md). Budget figures below are the completed v3 snapshot; current ledger has $4.488422 available after the unchanged uncertain 2¢.
+
 Both Haiku 5.5 writing arms receive identical sources, screened relationships, topic/tier and exclusions. Soft writing omits a claim inventory; strict writing adds atomic claim/card/source spans and permits grammatical scaffolding. Alternating order, opaque reviewer IDs and hash-ranked repairs are fixed before outputs. Source review reconstructs the whole card/variants without writer inventory. Quality review receives no explanation and requires exact question evidence for holds.
 
 The ambiguous-scope request retains both outcomes as a preparation shortage with no writing charge or replacement topic. The other 22 requests allow 44 initial writers. Eight sound/eight challenge controls and three saved regressions are separate from fresh yield. Gold is same-author development evidence; no independent adjudicator is assigned.
