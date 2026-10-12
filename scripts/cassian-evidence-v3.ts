@@ -1,4 +1,4 @@
-/** Offline v3 mechanics only. Never imported by serving or a paid runner. */
+/** Evidence-experiment mechanics. Never imported by production serving. */
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
