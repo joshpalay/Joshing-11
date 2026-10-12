@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-11
+last-reviewed: 2026-10-12
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -608,3 +608,73 @@ not "live."
    reading the ≥14-day clock from the first fire, not the deploy date.
 3. Watch whether the `tier` miss-reason share keeps growing relative to the
    other three reasons, or just tracks them proportionally as it has so far.
+
+### 2026-10-12 (diagnosis-review) — a SECOND loosened pick fired, 5 days after the first; same user, same shape; still far short of a usable Q3 sample
+
+**Environment note:** no `.env`/`.env.local` present, no `ANTHROPIC_API_KEY`
+in the process environment. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available and used for all
+queries below.
+
+**Headline: a second `loosened: true` pick has fired**, on the 2026-10-11
+17:05 UTC cron — the first new fire since the single occurrence on
+2026-10-06, six cron cycles earlier.
+
+| build_id | user | started_at (UTC) | domain | requested tier | served tier | outcome |
+|---|---|---|---|---|---|---|
+| `0a4f3b20…` | `f5ed1c59…` (same user as the first fire) | 2026-10-11 17:05:22 | Color References Across Film and TV | specialist | accessible | hit |
+
+Same user, same mechanism (specialist requested, accessible served, two
+steps away), same shape as the 2026-10-06 fire (`b691c375…`, Oklahoma!).
+**Both fires belong to the same single user** — worth naming plainly, since
+"2 loosened picks ever" and "2 loosened picks across 2 different users"
+would read very differently, and this is the former. **Not reading this as
+resolving anything** — n=2, both from one user, is nowhere near the
+"handful" this doc's own plan said was needed before Q3 or the §6 exit
+criteria mean anything.
+
+**Q1 (trailing 14 days), re-run:** 2026-09-28 through 2026-10-11. Blended
+hit rate stays noisy day to day (26.1%–65.9%), with 2026-10-11 itself the
+highest in the window (29 hits / 15 misses = 65.9%) and 2026-10-06 (the
+first-fire day) at 44.4%. `loosened`/`builds_loosened` now show `1/1` on
+both 2026-10-06 and 2026-10-11, `0` every other day — consistent with the
+headline above.
+
+**Q2 (gen_calls_per_build), re-run:** 2.50–5.50 across the window, with
+2026-10-11 at 2.60 (5 builds, the highest single-day build count in the
+window) — inside the existing noisy range, no visible shift tied to either
+fire day.
+
+**Q3 — now has two rows, still not a real sample.** Not running the full
+join for n=2 (same reasoning as every prior review at n=1); will start
+being meaningful once a handful more accumulate, ideally from more than one
+user.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 46 (up from 41), `filtered` 25 (up from 18),
+`no_stock` 18 (up from 16), `tier` **11 (up from 10)**. 100 total
+post-deploy misses now; `tier` holds at roughly the same share (11%) as
+every prior reading — growing in step with the other three reasons, not
+disproportionately.
+
+**No code change since the last review** to `generate-questions.ts`,
+`build-context.ts`, or `src/server/db/queries/daily.ts` — `git diff --stat
+ae1090e..HEAD` against all three returns nothing; the 15 new commits on
+`main` since the last review are a new "Cassian" admin-review-tool pilot
+plus one QA fix PR, unrelated to this doc's mechanism.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+still hasn't meaningfully started — a second fire, six cycles after the
+first, both from the same user, is not "live" in the sense the exit
+criteria mean.
+
+### Next steps (revised)
+1. Watch for a third `loosened: true` pick, ideally from a different user —
+   currently 2 ever, both the same user (`f5ed1c59…`), fired 2026-10-06 and
+   2026-10-11.
+2. Once a handful of loosened picks exist (ideally across more than one
+   user), run Q3 for real and start reading the ≥14-day clock from the
+   first fire.
+3. Watch whether the `tier` miss-reason share (now 11 of 100 post-deploy
+   misses) keeps tracking the other three reasons proportionally, as it has
+   every reading so far.

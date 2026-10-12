@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-11
+last-reviewed: 2026-10-12
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3422,5 +3422,100 @@ recommended-but-unrun blind-labeling pass, now at 94 of 702.
 3. A blind-labeling pass on `answer_leak_any_token` remains due (now 94 of
    702) — recommended since 2026-09-25, still not run.
 4. The six open `ContentReport` rows remain unaddressed, now 35 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+
+### 2026-10-12 (diagnosis-review) — 35 clean days on `answer_leak_partial`; first-ever recorded `domain_merged` event, confirmed harmless; everything else incremental, no decision-resolving change
+
+**Environment note:** fresh container this session — no `.env`/`.env.local`
+present (only `.env.example`'s empty placeholders), so `npm run
+check:category-integrity` can't run directly (`DATABASE_URL` absent) and no
+`ANTHROPIC_API_KEY` is available (checked `process.env` directly). Live,
+read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available and used for all queries below.
+Reproduced the audit's hard-failure checks directly against the live DB
+(orphan `KnowledgeEdge` rows, `KnowledgeNode` rows with more than one label
+per `domain_key`, `domain_merged` events in the last 24h) rather than via
+the script.
+
+**Verdict: `ok`** — zero `orphanEdges`, zero `nodeKeyMismatches`. **New: one
+`domain_merged` event in the last 24h** (`SpongeBob SquarePants` →
+`Sponge Bob Square Pants`, 2026-10-11T08:00:52Z) — the first time any review
+of this doc has found a nonzero count here; every prior reading was 0.
+Checked whether it constitutes a `graphSourceMerges` hard failure (the thing
+that count actually gates on, not just "a merge happened"): the merge's
+source label, `SpongeBob SquarePants`, has no `KnowledgeNode` of its own —
+only the target spelling, `Sponge Bob Square Pants`
+(`domain_key: 'sponge bob square pants'`), exists in the graph. So the
+merge's source was never a graph node to begin with, and `graphSourceMerges`
+is empty — **not a hard failure**, verdict stays `ok`. Soft findings
+(checked via a simplified regex approximation this pass, not the exact
+`domainKey()` fold the script uses): the same `splitKeys` pattern persists —
+Classic Childrens' Television apostrophe variant, Greek Mythology/mythology,
+Spy School series/Series (the Human Anatomy & Physiology pair wasn't
+re-verified exactly this pass since it needs the real `&`→`and` fold, not
+the plain-punctuation-strip approximation used here; no reason to think it
+resolved).
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 913 | 0 | 0 |
+| `domain_drift` | 913 | 1 | 0 |
+| `answer_leak_single_word` | 810 | 2 | 0 |
+| `answer_leak_any_token` | 727 | **97** | 0 |
+| `answer_shape` | 913 | 2 | 0 |
+| `quality` | 913 | 370 | 231 (unchanged since 2026-10-03) |
+
+`answer_leak_partial` now at **35 consecutive clean days**, 913 considered
+(up from 888) — still 0 drops. `domain_drift` has not produced a second hit
+(still 1 dropped, 888→913 considered) — the 2026-10-01 hit's Vercel log
+still hasn't been pulled by anyone. `answer_leak_single_word` gained 25
+considered (785→810), no new drop. `answer_leak_any_token` gained 3 more
+drops (94→97, 702→727 considered) — the recommended blind-labeling pass
+(open decision 6) remains unrun, now 17 days past its 2026-09-25
+recommendation. `quality`'s `failed_open` stays flat at 231 — no further
+recurrence of the 2026-10-02 `daily_build`-scope event; its `dropped` count
+rose 356→370, ordinary daily hits.
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+full id, all still `status='open'`:** `139e1932-d4e4-4fc6-9f78-53a05cecadfe`,
+`800c44a3-b00a-4226-8c46-8d7e6f263a6b`, `357618e3-3102-40bc-bd6b-427c40b78514`
+(the first three), plus `b1804847-572e-4680-ac24-300f208c739d`,
+`3c3f9989-390a-451e-bb28-19edf65c966e`, `815b3ad8-3b54-4c64-a102-0854f223bcc3`
+(the 2026-09-06-evening three) — now **36 days** since filing.
+
+**Bank `still_servable` (is_duplicate=false): 2,826**, up from 2,791 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** `git diff --stat
+ae1090e..HEAD` (the 15 commits since the last diagnosis-review commit,
+mostly a new "Cassian" admin-review-tool pilot plus one QA fix PR) against
+`self-answering.ts`, `off-domain-second-opinion.ts`, `generate-questions.ts`,
+`sweep-bank-quality.ts`, and `rewrite-bank-demotions.ts` returns nothing.
+One tangential touch worth naming: `src/server/daily/__tests__/quality-gate.eval.test.ts`
+(the live GENERIC_AT_TIER eval, shared infrastructure with this doc's Phase
+2 eval conventions) had a single fixture's expected answer corrected
+(`'bone'` → `'off-white'`, an American Psycho prop-detail fix, `#1772`) —
+a factual-accuracy fix to an existing fixture, not a change to any R1/R2 or
+gate rule text.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment. Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 97 of 727.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 35+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 97 of
+   727) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 36 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
