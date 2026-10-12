@@ -1,6 +1,8 @@
 # Cassian: fresh evidence and controls
 
-October 12, 2026, following the initial preparation merge [#1781](https://github.com/joshpalay/Joshing-11/pull/1781) at `2e5e1033`. The [23-request selection](FRESH-PREPARATION.md) is unchanged. **The source/novelty preparation pass and development control set are complete; paid execution is not ready.** No new provider calls, database activity, bank promotion or production gate change. Creation cost per new usable unique question remains the primary measure.
+**Execution update, October 12:** the [fresh comparison and separate audit are complete](FRESH-RESULTS.md); 101 calls settled for $0.963987 and neither arm yielded a deliverable question. The evidence, development gold and original preparation labels below remain unchanged; later audit uncertainties are recorded separately.
+
+**Historical preparation snapshot:** October 12, following [#1781](https://github.com/joshpalay/Joshing-11/pull/1781) at `2e5e1033`. The [23-request selection](FRESH-PREPARATION.md) was unchanged. Source/novelty preparation and the development control set were complete; paid execution was not ready at that snapshot. This preparation phase added no provider calls, database activity, bank promotion or production gate change. Creation cost per new usable unique question remains primary.
 
 ## Prepared evidence
 
