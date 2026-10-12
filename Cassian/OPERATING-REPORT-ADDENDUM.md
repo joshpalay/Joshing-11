@@ -1,0 +1,11 @@
+# Cassian: October 12 operating-report addendum
+
+The owner supplied the October 5–12 weekly cost/latency digest. Exact operating amounts and the supplied snapshot are saved privately; no fresh database query or invoice reconciliation was performed. This is production telemetry context, not another Cassian trial result. The [frozen v3 revision](EVIDENCE-V3.md), old scores and experiment ledger remain unchanged.
+
+Generation is roughly half of the reported weekly spend; quality and fact checking together are about one third, and retrieval accounts for another substantial share. Even eliminating writer cost entirely leaves the non-writer weekly expense above the equivalent weekly allowance for the owner's monthly target. Therefore a writer change can help but cannot meet that target alone at this observed workload. A week-over-week decrease cannot establish efficiency gains without workload/volume context.
+
+The report's generation unit is generation-bucket spend divided by `GeneratedQuestion` rows created in the window. The bank path inserts serving copies into that same table, so the denominator is not verified fresh usable yield. Report labels now say **generation spend per saved question** and explicitly include bank copies/exclude checks and retrieval. The hard-coded claim that checks are most of the spend was removed because the supplied table does not support it. Calculations, taxonomy and database queries are unchanged; stored historical reports are not rewritten or re-sent.
+
+The live-surface latency figures measure individual call durations. Background generation/source timings do not measure cold or depleted-topic request-to-ready time. Keep the separate [complete-task measurement](EVIDENCE-EVALUATION-PLAN.md), including preparation labor, failures, replacements, unresolved requests and final serving lineage. Call counts are not counts of unique questions or answers, so derive no retry/failure rate from their difference alone.
+
+No paid provider call, database read/write, report email, model switch or experiment re-score occurred for this addendum. The report copy correction is included alongside the open offline-revision PR; it does not alter the hashed v3 code/policy artifacts.
