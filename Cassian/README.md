@@ -10,12 +10,13 @@ Free follow-up complete: the [source audit](SOURCE-COVERAGE.md) found that saved
 
 ## Confirmed owner decisions
 
+- **Primary cost metric:** [full creation cost per new usable unique question](COST-PRIORITY.md), including failed/replacement attempts. Quality, variant validity, novelty and topic/difficulty coverage remain constraints. Track evidence labor separately from provider dollars.
 - Admin-only, visibly distinct experiment in Daily Five after the bonus questions.
 - Answer questions normally, then give detailed ratings and optional corrections.
 - No mastery contribution and no propagation to the activity stream. Keep attempts/feedback isolated from normal gameplay records. There is no authorized points/streak change; the pilot does not award them.
 - Never serve a previously shown question/fact as new. Keep narrow topics available; don't hide shortages through repeats or broader-topic substitution.
 - Main speed goal: topic chosen → first eligible unseen question ready.
-- Desired ongoing game LLM cost: **$5/month**, aspirational until measured. Also report cost per game/player-day to explain growth.
+- Desired ongoing game LLM cost: **$5/month**, a secondary longer-term aspiration as the bank matures. Also report bank reuse and amortized cost per served question/game or player-day at the actual workload.
 - **$10 total incremental experiment budget**, across all calls, admins and runs. Admin-only deployment and bounded paid runs are already authorized.
 - Reuse existing provider infrastructure without changing the global model switches.
 - No formal disagreement workflow. Retain Unsure/Unverifiable labels.
