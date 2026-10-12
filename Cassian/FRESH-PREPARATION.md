@@ -1,6 +1,6 @@
 # Cassian: fresh comparison preparation
 
-October 12, 2026, after the owner-requested merge of [#1780](https://github.com/joshpalay/Joshing-11/pull/1780) at `f7e2f457`. [Creation unit cost](COST-PRIORITY.md) remains primary. **Topic selection and source leads are prepared; the paid comparison is not yet dispatch-ready.** No new model calls, questions, ratings or bank/gameplay writes.
+October 12, 2026, after the owner-requested merge of [#1780](https://github.com/joshpalay/Joshing-11/pull/1780) at `f7e2f457`. [Creation unit cost](COST-PRIORITY.md) remains primary. **Selection, source/novelty preparation and development controls are prepared; the paid comparison is not yet dispatch-ready.** The [evidence follow-up](FRESH-EVIDENCE.md) records 38 available relationships across 22 of the original 23 requests, eight sound/eight challenge controls and three mandatory regressions. No new model calls, owner ratings or bank/gameplay writes.
 
 ## Frozen sampling frame
 
@@ -21,7 +21,7 @@ Stock counts use generous all-tier/own-unused eligibility with conservative full
 
 Selection hash: `cae842b1248409c00527753c37c82b65a5ad71a69bb47bc397c739c3b3d4792a`. Complete raw snapshot hash: `5c850cc7a3fc6387220968aefbebf6058a2adf33f19c600d9686bed644f07074`. Exact raw and derived frames, labels, selection and source-routing scripts are private under `_scratch/Cassian/cassian-fresh-2026-10-12/`.
 
-## Evidence and cost recording
+## Initial source-lead preparation and cost recording
 
 All 23 requests have captured public source leads with raw-response/extract hashes, revision metadata or page identity, locators and HTTP timing. One request also has an original-study lead to improve topical coverage. Acquisition made 37 HTTP attempts, including **13 retained rate-limit failures**; paced cooldown retries preserve earlier artifacts. These captures are research inputs, not yet reviewed eligible fact inventories, independent gold or complete source-support certificates.
 
@@ -33,8 +33,8 @@ The budget projection is **about $1.13–$2.47 in provider charges**, with a **p
 
 ## Remaining before any paid run
 
-Review topical source identity, atomic facts and history/stock novelty; handle ambiguous labels and missing support explicitly. Prepare at least eight sound and eight challenge controls plus the three mandatory chronology/attribution/formation regressions. Freeze source packets, gold/scoring, actual prompts/settings and all request hashes, including output-dependent review preparation, reservation bounds and repair selection. Build/check the resumable v3 dispatch integration separately from the old completed runners.
+The [source/novelty pass and blind development controls](FRESH-EVIDENCE.md) are now prepared separately from this initial snapshot, retaining one ambiguous-scope request and all prior artifacts. Next freeze actual prompts/settings and request construction, including output-dependent review preparation, reservation bounds and repair selection. Build/check the resumable v3 dispatch integration separately from the old completed runners.
 
 The owner has been asked optionally who can adjudicate evidence independently after generation; no person has been assigned. Source/claim preparation can continue while that preference is pending. Same-author evidence remains development evidence and is never relabeled independent.
 
-**12 focused tests across two files, TypeScript and affected lint pass.** Tests cover deterministic selection, unique topics, shortages/exclusions, shared-cost allocation, failed attempts, unknown charges/labor, pending work, duplicate usable facts and reviewer provenance. Prior scores, requests and frozen mechanics are preserved. Private frozen script copies now use a non-executable `.frozen` extension to avoid being compiled; their hashes remain unchanged.
+The initial preparation passed **12 focused tests across two files**, TypeScript and affected lint. The evidence follow-up now passes **48 tests across five files**, including those initial checks. Prior scores, requests and frozen mechanics are preserved. Private frozen script copies use a non-executable `.frozen` extension to avoid being compiled; their hashes remain unchanged.
