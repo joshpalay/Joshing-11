@@ -1,4 +1,6 @@
-# Cassian: captured-evidence writing test prepared
+# Cassian: captured-evidence writing test preparation snapshot
+
+**Completed follow-up:** the owner subsequently approved the transfer with “Do it.” All fourteen calls finished for $0.127014 settled; see [actual results and next repairs](EVIDENCE-RESULTS.md). No approval is pending for this completed run. The remainder preserves the pre-dispatch design and accounting snapshot; its zero-reply/pending statements describe that earlier stage.
 
 October 11, 2026, after the [source audit](SOURCE-COVERAGE.md) merged in [#1776](https://github.com/joshpalay/Joshing-11/pull/1776). The next test is frozen and locally checked. **No writer or reviewer API reply has been obtained.** It compares one cheap writer under two evidence instructions, rather than switching production models or buying another expensive-writer comparison.
 
@@ -32,7 +34,7 @@ The [pure core](../scripts/cassian-evidence-core.ts) validates final JSON/shorta
 
 **53 focused tests across six files passed**, alongside TypeScript, affected-file lint and diff checks. Tests cover request/settings drift, unsafe file paths, duplicate IDs, changed checkpoint contents, malformed/nonfinal writers, shortages, omitted claims, invented evidence, batch refusal and existing budget/recovery behavior. Free plan ran with API/DB/environment-file variables unset. A free second-stage attempt correctly reported that it awaits saved replies and created no requests. Read-only budget proof found zero spend/reserve for both new runs, the earlier uncertain call unchanged, and a new reservation fitting inside the cap.
 
-## Current approval and limits
+## Pre-dispatch approval and limits (historical)
 
 Automatic approval review rejected the first proposed `--run --limit 1` command **before the process started**. It requires explicit approval for this new experiment's private question/source payload sent to Anthropic. The approval question requests up to fourteen calls, about 19¢ estimated and capped at 75¢ within the existing $10 budget, while retaining the older 2¢. No workaround or further paid attempt occurred. Await that answer before dispatch.
 
