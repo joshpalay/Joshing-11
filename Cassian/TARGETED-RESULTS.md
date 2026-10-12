@@ -4,6 +4,8 @@ October 11, 2026. The owner explicitly approved the frozen eight-call comparison
 
 **This pipeline is not ready for a live writer trial.** Fresh quality review cleared two known false holds, but neither whole card could pass because its saved passage lacked factual coverage. The combined flow passed only two previously source-audited usable cards, passed one card needing an explanation correction, and left fifteen attempts unresolved. The next experiment should improve evidence supplied to writing and verification before adding more judge votes.
 
+The subsequent [free source audit](SOURCE-COVERAGE.md) is complete, with a captured-page development prototype and [offline evidence contract](EVIDENCE-CONTRACT.md). It clarifies derived-summary provenance and the longer first-block reviewer packets. This addendum preserves all original trial inputs, scores and labels.
+
 ## Outcomes on the frozen cohort
 
 All 24 original writer attempts, 22 owner ratings, two novelty exclusions and original attempt costs were retained. Quality review covered seven original holds plus four deterministically sampled passes; source verification covered all 22 eligible cards. Both reviewers used `claude-sonnet-5-5`, with unchanged prompts/request hashes, a 3,000-token response limit, 30-second timeout and zero retries. All responses ended normally; no malformed, truncated, missing-ID or invented-quotation response was accepted.
