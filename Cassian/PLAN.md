@@ -1,6 +1,8 @@
 # Cassian implementation plan
 
-Version 1, 2026-10-03. This is the current plan; the older QEXP-01 plan is background only.
+**Owner priority update, October 12, 2026:** [full creation cost per new usable unique question](COST-PRIORITY.md) is the primary cost metric. Include retrieval, checks, failed/repair/replacement attempts and verified novelty; track preparation labor separately. The $5/month aspiration is secondary as bank coverage/reuse grows. Current implementation/results and next study are in [TRACKER.md](TRACKER.md) and [NEXT-STEPS.md](NEXT-STEPS.md); the original staged design below is history, not a new execution instruction.
+
+Original staged plan, version 1, 2026-10-03. Current priorities/status above and in the tracker supersede completed execution steps; the older QEXP-01 plan is background only.
 
 Update 2026-10-08: the original Sonnet 5.5 versus Haiku 4.5 comparison and a newer [Sonnet 5.5 versus Haiku 5.5 trial](HAIKU-55.md) are complete. The model IDs and proposed first comparator below describe the initial design; follow [NEXT-STEPS.md](NEXT-STEPS.md) for current actions.
 
