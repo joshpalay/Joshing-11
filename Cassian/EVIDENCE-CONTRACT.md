@@ -1,4 +1,6 @@
-# Cassian offline evidence contract
+# Cassian offline evidence contract: initial design snapshot
+
+**Current revision:** [v3 offline contract](EVIDENCE-V3.md), after the completed [writing results](EVIDENCE-RESULTS.md) and [separate adjudication](EVIDENCE-ADJUDICATION.md). The remainder preserves the initial design; its future/not-run statements refer to that earlier stage.
 
 Proposed after the [free source-coverage audit](SOURCE-COVERAGE.md). This is a concrete design and writer instruction for a future frozen offline comparison. It is not wired into serving or the paid runner. Mechanical quotation checks cannot prove truth or whether a claim follows from a passage; those remain separate review tasks.
 

@@ -57,8 +57,10 @@ Both completed resumes made **zero new calls** and no additional charges. Fourte
 
 Private manifests, source captures, requests, responses, labels, scores, per-item audit and settlement/resume proof remain ignored under `_scratch/Cassian/`. The initial manifest SHA is `7d16f6af34702b1ecf9f677e2ff136d77fa3265dda7ce2039f62da556920831b`; the generated-review manifest SHA is `bbcdc15ae46705a4c8cec88fbc49f28679678b5d301ffe5216385f1591ff9b44`. Saved score SHA is `57bd092fca16c62063981b20fa8723337a7591db37c2668aafbb1a67e8f75979`. Preparation had 53 focused tests plus TypeScript/lint passing; this follow-up changes documentation only. No candidate, bank or gameplay writes occurred.
 
-## Next work
+## Next work recorded at completion
 
 Before another paid test, make free evidence/protocol repairs: supply explicit source section/edition identity and acronym definitions; deterministically normalize presentation line-number noise while retaining raw hashes and locators; map material assertions without requiring every question word to be evidence; and include variant specificity and answer-language checks. Test formation wording separately from unambiguous contradictions. Keep source, quality and novelty requirements, and retain this run unchanged as the baseline.
 
 After those repairs, freeze a separate evaluation before any new calls. Independent examples/review and full-path cost, novelty and latency evidence remain necessary before a live trial. No more owner answers are needed for this completed batch. See [next steps](NEXT-STEPS.md).
+
+**October 12 follow-up:** [separate adjudication](EVIDENCE-ADJUDICATION.md) and [v3 offline repairs](EVIDENCE-V3.md) complete, with this result and its scores unchanged. The [fresh evaluation protocol](EVIDENCE-EVALUATION-PLAN.md) now includes breadth/history selection and complete-task/labor measurement; concrete new inputs and dispatch remain unprepared. No additional paid calls.
