@@ -4,6 +4,7 @@
     "node_modules",
     "_salvaged",
     ".claude",
+    "_scratch/Cassian/**/EXECUTED-ARCHIVE/**",
     "**/__tests__/**",
     "**/*.test.ts",
     "**/*.test.tsx"

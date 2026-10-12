@@ -4,6 +4,8 @@ Owner decision, October 12, 2026: **cost per new usable question is the primary 
 
 **Current measurement state:** the [fresh comparison](FRESH-RESULTS.md) and [subsequent compatibility probe](COMPATIBILITY-RESULTS.md) have completed. The first had zero deliverable yield; the second is a known-case mechanics probe without an independently verified production-yield denominator. Full creation unit cost remains unavailable. Next repair semantic coverage and supplied evidence offline; complete-task retrieval, labor, readiness and billing remain unmeasured.
 
+The subsequent [offline coverage repair](COVERAGE-REPAIR.md) has completed at zero new provider cost. Its explicit semantic mappings and source-completeness attestations are author work, not a free production dependency. Any added automated reconciliation calls and preparation/adjudication labor must enter future complete-task accounting. This phase supplies no new production usable-yield estimate.
+
 ## Primary measurement
 
 Divide all operational creation costs by the number of new, unique questions independently verified as usable for the requested topic, difficulty and history constraints. Include retrieval/evidence preparation, writing, all checks/escalations, repairs, failures and replacement attempts. Failed or unresolved topics retain their costs; duplicate, unverified, incorrect or already-seen facts do not enter the usable denominator. If no usable questions result, report zero yield and cost per usable question as undefined.
