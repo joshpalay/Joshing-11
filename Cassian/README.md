@@ -1,5 +1,9 @@
 # Cassian — question creation experiment
 
+**Latest work, October 12:** [offline claim/source coverage repair complete](COVERAGE-REPAIR.md), at zero new provider spending. Assertion matching replaces quote-span containment; explicit bound audits preserve real omissions and uncertainty. A separate saved packet revision restores two complete result passages and passes preparation checks. Two false alarms clear, three real omissions remain, and one reviewer-added-context assertion stays unresolved. 132 tests, TypeScript/lint pass. Next independently review evidence/material scope where feasible and prepare a separate bounded frozen integration; the formation-model escape remains unresolved. No paid dispatch or rollout is ready from this free phase.
+
+**Historical paid probe:**
+
 **October 12 compatibility probe complete:** [eighteen calls settled for $0.290390](COMPATIBILITY-RESULTS.md). The new [v4 contract](EVIDENCE-V4.md) produced four final writer cards and valid source/quality replies throughout. Both sound controls survived; the formation regression still escaped. Strict inventory reconciliation also has real omissions and span-based false alarms, and one source check waived missing supplied evidence. Overall criteria failed; next repair claim reconciliation and source-packet completeness offline. Same-author known cases, unknown labor, no production change.
 
 The earlier [101-call comparison](FRESH-RESULTS.md) remains frozen at $0.963987: no strict final JSON, all source replies invalid and zero deliverable questions. The new probe does not rewrite those scores or establish production yield. Primary cost per independently verified new usable question remains unavailable.

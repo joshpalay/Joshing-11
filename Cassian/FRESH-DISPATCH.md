@@ -4,6 +4,8 @@ October 12, 2026. **Execution and the separate author audit are complete:** [101
 
 **Later follow-up:** [v4 compatibility probe completed](COMPATIBILITY-RESULTS.md), eighteen calls/$0.290390 settled. Current contract/next steps are in [EVIDENCE-V4.md](EVIDENCE-V4.md) and [NEXT-STEPS.md](NEXT-STEPS.md). Budget figures below are the completed v3 snapshot; current ledger has $4.488422 available after the unchanged uncertain 2¢.
 
+**Subsequent free phase:** [offline coverage repair](COVERAGE-REPAIR.md) is complete and frozen separately. It does not change this runner or any executed design/score. Independent evidence/material-scope review and a new bounded integration remain next; the free freeze is not ready for paid dispatch.
+
 Both Haiku 5.5 writing arms receive identical sources, screened relationships, topic/tier and exclusions. Soft writing omits a claim inventory; strict writing adds atomic claim/card/source spans and permits grammatical scaffolding. Alternating order, opaque reviewer IDs and hash-ranked repairs are fixed before outputs. Source review reconstructs the whole card/variants without writer inventory. Quality review receives no explanation and requires exact question evidence for holds.
 
 The ambiguous-scope request retains both outcomes as a preparation shortage with no writing charge or replacement topic. The other 22 requests allow 44 initial writers. Eight sound/eight challenge controls and three saved regressions are separate from fresh yield. Gold is same-author development evidence; no independent adjudicator is assigned.
