@@ -126,7 +126,7 @@ function parseAssessments<T extends { id: string }>(raw: string, ids: string[], 
   } catch { return null; }
 }
 
-export function qualityDecision(item: TargetedItem, assessment: QualityAssessment): { decision: Decision; issues: string[] } {
+export function qualityDecision(item: Pick<TargetedItem, 'question' | 'answer' | 'variants'>, assessment: QualityAssessment): { decision: Decision; issues: string[] } {
   const issues: string[] = [];
   const quotes = [...assessment.requestGroups.map(g => g.quote), ...assessment.otherDefects.map(d => d.quote),
     ...(assessment.disclosure ? [assessment.disclosure.quote] : [])];
@@ -141,7 +141,7 @@ export function qualityDecision(item: TargetedItem, assessment: QualityAssessmen
   return { decision: issues.length ? 'review' : assessment.disclosure || assessment.otherDefects.length ? 'hold' : 'pass', issues };
 }
 
-export function factualDecision(item: TargetedItem, assessment: FactualAssessment): { decision: Decision; issues: string[] } {
+export function factualDecision(item: Pick<TargetedItem, 'sources'>, assessment: FactualAssessment): { decision: Decision; issues: string[] } {
   const issues: string[] = [];
   const sources = new Map(item.sources.map(s => [s.id, s.text]));
   const fields = [assessment.question, assessment.answer, assessment.explanation];
@@ -153,6 +153,20 @@ export function factualDecision(item: TargetedItem, assessment: FactualAssessmen
   if (fields.some(f => f.status === 'contradicted')) return { decision: 'hold', issues: ['source_contradiction'] };
   if (fields.some(f => f.status === 'unknown')) return { decision: 'review', issues: ['source_support_unknown'] };
   return { decision: 'pass', issues };
+}
+
+/** Same strict assessment contract for offline controls and generated cards, without invented writer labels. */
+export function assessReviewReply(kind: 'quality' | 'factual', items: Pick<TargetedItem, 'id' | 'question' | 'answer' | 'variants' | 'sources'>[], reply: ReviewReply | undefined) {
+  const ids = items.map(i => i.id);
+  if (new Set(ids).size !== ids.length) throw new Error('Duplicate review input IDs.');
+  const assessments = !reply || reply.stopReason !== 'end_turn' ? null : kind === 'quality'
+    ? parseAssessments(reply.raw, ids, qualityAssessment) : parseAssessments(reply.raw, ids, factualAssessment);
+  return items.map(item => {
+    const a = assessments?.find(x => x.id === item.id);
+    const result = !a ? { decision: 'review' as const, issues: [reply ? 'invalid_review_response' : 'review_not_run'] }
+      : kind === 'quality' ? qualityDecision(item, a as QualityAssessment) : factualDecision(item, a as FactualAssessment);
+    return { id: item.id, ...result };
+  });
 }
 
 export function scoreTargetedReview(manifest: TargetedManifest, replies: Record<string, ReviewReply>) {
