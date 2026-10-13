@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-10-13",
+  "baselineMainCommit": "1ecf24baba0e93bb802d85c51a99faeba5fd88ba",
+  "scope": "saved fresh soft arm; offline replay only",
+  "review": {
+    "kind": "separate Codex AI review; not independent human verification",
+    "originalRequests": 23,
+    "preparationShortages": 1,
+    "initialCards": 22,
+    "replacementOutputs": 2,
+    "outputsReviewed": 24,
+    "outputDispositions": {
+      "usableAsWritten": 17,
+      "needsRevision": 6,
+      "incorrect": 0,
+      "duplicateOrIneligible": 1,
+      "unverifiable": 0
+    },
+    "usableOriginalSlots": 17,
+    "revisionOnlyOriginalSlots": 5,
+    "crossSlotMaterialRepeatsObserved": 0,
+    "exhaustivePriorBankCoverageVerified": false,
+    "independentHumanVerification": false,
+    "privateEvidence": "ignored separate-AI-review notes: 24 raw output keys and 29 passage locator rows"
+  },
+  "precheck": {
+    "rules": [
+      "required fields, schema and bound ID",
+      "exact normalized question-and-answer repeat in saved raw bank/player-history records"
+    ],
+    "sourceReviewCallsAvoided": 0,
+    "grossSourceReviewUsdAvoided": 0,
+    "usableAsWrittenOutputsWronglyStopped": 0,
+    "aiReviewedUsableOriginalSlotsAfterReplay": 17,
+    "newReplacementsGenerated": 0,
+    "provenAllInProductionSavingsUsd": null
+  },
+  "breadth": {
+    "broad": {
+      "requests": 7,
+      "outputs": 7,
+      "usableOriginalSlotsByAiReview": 5,
+      "stopped": 0,
+      "grossSourceReviewUsdAvoided": 0
+    },
+    "niche": {
+      "requests": 8,
+      "outputs": 7,
+      "usableOriginalSlotsByAiReview": 6,
+      "stopped": 0,
+      "grossSourceReviewUsdAvoided": 0
+    },
+    "veryNarrow": {
+      "requests": 8,
+      "outputs": 10,
+      "usableOriginalSlotsByAiReview": 6,
+      "stopped": 0,
+      "grossSourceReviewUsdAvoided": 0
+    }
+  },
+  "baselineProviderUsd": {
+    "softOperational": 0.5410001,
+    "softWriting": 0.0136506,
+    "softRepairs": 0.0011395,
+    "softSourceReview": 0.488242,
+    "softSourceReviewCalls": 24,
+    "softQuality": 0.037968,
+    "strictOperational": 0.0334814,
+    "experimentControls": 0.389508,
+    "allResponseReceipts": 0.9639895,
+    "allResponseReceiptCalls": 101,
+    "historicalLedgerSettlement": 0.963987,
+    "oldUncertainReservationUnchanged": 0.02,
+    "newPaidCalls": 0
+  },
+  "preservation": {
+    "privateFrozenFilesSha256Matched": 229,
+    "laterEditedPublicDocumentationPathsDifferentFromFreeze": 6,
+    "originalCardsPromptsGoldScoresAndReceiptsChanged": false,
+    "privatePayloadCommitted": false
+  },
+  "decision": "do not adopt: zero gross source-review saving"
+}

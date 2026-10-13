@@ -1079,6 +1079,13 @@
       "when": 1791052800000,
       "tag": "0153_cassian_panel_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1791907389034,
+      "tag": "0154_secure_cassian_tables",
+      "breakpoints": true
     }
   ]
 }

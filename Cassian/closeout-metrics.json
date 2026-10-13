@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "asOf": "2026-10-13",
-  "status": "inconclusive_private_question_audit_unavailable",
-  "mainCommit": "df85d8ab0153777c8c923017c7cb455cf4a15f6e",
+  "status": "retrospective_ai_review_complete_all_in_production_cost_unverified",
+  "mainCommit": "c5a307061c8b6434697bc4e3c814c9bbb66500fe",
   "providerPricesInvoiceReconciled": false,
   "review": {
     "rubricFrozen": true,
@@ -14,14 +14,31 @@
       "unverifiable"
     ],
     "separateCodexReviewerAssigned": true,
-    "separateReviewerCompleted": false,
-    "candidateOutputsReviewed": 0,
+    "separateReviewerCompleted": true,
+    "candidateOutputsReviewed": 24,
     "expectedCandidateOutputs": 24,
-    "provenance": "separate Codex AI attempt; no card access; no independent human verification",
+    "provenance": "separate Codex AI review; not independent human verification",
     "humanLaborMinutes": null,
     "agentReviewMinutes": null,
     "newProviderUsd": 0,
-    "newRetrievalCount": 0
+    "newRetrievalCount": 0,
+    "initialAttempt": {
+      "candidateOutputsReviewed": 0,
+      "completed": false,
+      "reason": "local tool access failed; historical attempt superseded by completed #1793 AI review"
+    },
+    "independentHumanVerification": false,
+    "exhaustivePriorBankCoverageVerified": false,
+    "outputDispositions": {
+      "usableAsWritten": 17,
+      "needsRevision": 6,
+      "incorrect": 0,
+      "duplicateOrIneligible": 1,
+      "unverifiable": 0
+    },
+    "usableOriginalSlots": 17,
+    "revisionOnlyOriginalSlots": 5,
+    "sourceReport": "PRECHECK-REPLAY.md"
   },
   "pilot": {
     "cohort": "12 topics, 24 candidates; paired writer arms",
@@ -79,7 +96,11 @@
       "retrospectiveSupervisedUnitCostUsd": null,
       "automatedDelivered": 0,
       "originalRequests": 23,
-      "automatedUnitCostUsd": null
+      "automatedUnitCostUsd": null,
+      "aiReviewedUsableOutcomes": 17,
+      "aiReviewedProviderUnitCostUsd": 0.03182353529411765,
+      "aiReviewedProviderUnitCostIncludesReviewLabor": false,
+      "unitCostLimitation": "AI-reviewed provider-only estimate; independent human verification, exhaustive prior-bank novelty, preparation/review labor and complete automatic retrieval/readiness unverified"
     },
     "strict": {
       "operationalProviderResponseEstimateUsd": 0.0334814,
@@ -115,7 +136,7 @@
     "readinessMeasured": false
   },
   "lifetime": {
-    "source": "last connected-ledger snapshot reported in main at #1789; no live read during closeout",
+    "source": "last connected-ledger snapshot reported at #1789 and repeated in #1791; no live read during reconciliation",
     "capUsd": 10,
     "settledUsd": 6.396224,
     "oldUncertainReservedUsd": 0.02,
@@ -127,13 +148,19 @@
   },
   "prospective": {
     "ran": false,
-    "reason": "saved generation evidence exists; missing audit could not be remedied by new generation; usable review access and live budget verification unavailable",
+    "reason": "initial review/live budget access unavailable; later saved-cohort AI review completed without new generation; complete production path still unverified",
     "paidCalls": 0
   },
   "decision": {
     "productionChangeJustified": false,
-    "optimizationCandidate": "source-review cost, subject to factual-quality verification",
-    "optimizationImplemented": false
+    "optimizationCandidate": "source-review stage remains cost concentration; exact-repeat/required-field precheck rejected at zero saving",
+    "optimizationImplemented": false,
+    "precheck": {
+      "adopt": false,
+      "outputsStopped": 0,
+      "sourceReviewCallsAvoided": 0,
+      "grossProviderUsdAvoided": 0
+    }
   },
   "cassianBaselineCommit": "4b0cd6c721318730fed3aa695a0522d5de8b5810"
 }
