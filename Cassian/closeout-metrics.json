@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-10-13",
+  "status": "inconclusive_private_question_audit_unavailable",
+  "mainCommit": "4b0cd6c721318730fed3aa695a0522d5de8b5810",
+  "providerPricesInvoiceReconciled": false,
+  "review": {
+    "rubricFrozen": true,
+    "requestedDispositions": [
+      "usable as written",
+      "needs revision",
+      "incorrect",
+      "duplicate/ineligible",
+      "unverifiable"
+    ],
+    "separateCodexReviewerAssigned": true,
+    "separateReviewerCompleted": false,
+    "candidateOutputsReviewed": 0,
+    "expectedCandidateOutputs": 24,
+    "provenance": "separate Codex AI attempt; no card access; no independent human verification",
+    "humanLaborMinutes": null,
+    "agentReviewMinutes": null,
+    "newProviderUsd": 0,
+    "newRetrievalCount": 0
+  },
+  "pilot": {
+    "cohort": "12 topics, 24 candidates; paired writer arms",
+    "sourcePerArmAllocatedUsd": 0.659614,
+    "arms": [
+      {
+        "model": "Sonnet 5.5",
+        "writerAndGatesUsd": 0.356019,
+        "totalAllocatedUsd": 1.015633,
+        "auditedKeeps": 8,
+        "attempts": 12,
+        "allocatedUsdPerKeep": 0.126954125
+      },
+      {
+        "model": "Haiku 4.5",
+        "writerAndGatesUsd": 0.224766,
+        "totalAllocatedUsd": 0.88438,
+        "auditedKeeps": 5,
+        "attempts": 12,
+        "allocatedUsdPerKeep": 0.176876
+      }
+    ],
+    "limitations": [
+      "paired source retrieval half allocation",
+      "audited keep is not complete new eligible production yield",
+      "unknown historical labor",
+      "not a matched comparison with fresh cohort"
+    ]
+  },
+  "fresh": {
+    "selectedRequests": 23,
+    "intendedFrame": 24,
+    "intendedFrameDeficit": 1,
+    "breadth": {
+      "broad": 7,
+      "niche": 8,
+      "veryNarrow": 8
+    },
+    "perArm": {
+      "preparationShortages": 1,
+      "initialWriterCalls": 22,
+      "replacementCalls": 2
+    },
+    "soft": {
+      "operationalProviderResponseEstimateUsd": 0.5410001,
+      "stageUsd": {
+        "writing": 0.0136506,
+        "repairs": 0.0011395,
+        "sourceReview": 0.488242,
+        "quality": 0.037968,
+        "recordedAnthropicRetrieval": 0
+      },
+      "sourceReviewSharePct": 90.24804246801433,
+      "verifiedUsableOutcomes": null,
+      "retrospectiveSupervisedUnitCostUsd": null,
+      "automatedDelivered": 0,
+      "originalRequests": 23,
+      "automatedUnitCostUsd": null
+    },
+    "strict": {
+      "operationalProviderResponseEstimateUsd": 0.0334814,
+      "automatedDelivered": 0,
+      "originalRequests": 23
+    },
+    "controls": {
+      "providerResponseEstimateUsd": 0.389508
+    },
+    "allArms": {
+      "automatedDelivered": 0,
+      "armRequestOutcomes": 46,
+      "operationalProviderResponseEstimateUsd": 0.5744815
+    },
+    "experiment": {
+      "inferenceCalls": 101,
+      "responseReceiptEstimateUsd": 0.9639895,
+      "ledgerSettlementUsd": 0.963987,
+      "roundingDifferenceUsd": 0.0000025
+    },
+    "allocation": "shared retrieval/preparation half per arm; actual quality batch cost equally by member; controls separate; all failures and replacements retained",
+    "labor": {
+      "historicPreparationMinutes": null,
+      "historicAdjudicationMinutes": null,
+      "closeoutHumanRatingsRequested": 0
+    },
+    "retrieval": {
+      "httpAttempts": 38,
+      "rateLimitFailures": 13,
+      "anthropicProviderUsdRecorded": 0,
+      "manualCurationRequired": true
+    },
+    "readinessMeasured": false
+  },
+  "lifetime": {
+    "source": "last connected-ledger snapshot reported in main at #1789; no live read during closeout",
+    "capUsd": 10,
+    "settledUsd": 6.396224,
+    "oldUncertainReservedUsd": 0.02,
+    "availableAfterReservationUsd": 3.583776,
+    "additionalCloseoutProviderUsd": 0,
+    "publicCategorySubtotalUsd": 6.394555,
+    "unattributedCategoryDifferenceUsd": 0.001669,
+    "liveVerified": false
+  },
+  "prospective": {
+    "ran": false,
+    "reason": "saved generation evidence exists; missing audit could not be remedied by new generation; usable review access and live budget verification unavailable",
+    "paidCalls": 0
+  },
+  "decision": {
+    "productionChangeJustified": false,
+    "optimizationCandidate": "source-review cost, subject to factual-quality verification",
+    "optimizationImplemented": false
+  }
+}
