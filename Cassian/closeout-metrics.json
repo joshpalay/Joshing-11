@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "asOf": "2026-10-13",
+  "status": "retrospective_ai_review_complete_all_in_production_cost_unverified",
+  "mainCommit": "c5a307061c8b6434697bc4e3c814c9bbb66500fe",
+  "providerPricesInvoiceReconciled": false,
+  "review": {
+    "rubricFrozen": true,
+    "requestedDispositions": [
+      "usable as written",
+      "needs revision",
+      "incorrect",
+      "duplicate/ineligible",
+      "unverifiable"
+    ],
+    "separateCodexReviewerAssigned": true,
+    "separateReviewerCompleted": true,
+    "candidateOutputsReviewed": 24,
+    "expectedCandidateOutputs": 24,
+    "provenance": "separate Codex AI review; not independent human verification",
+    "humanLaborMinutes": null,
+    "agentReviewMinutes": null,
+    "newProviderUsd": 0,
+    "newRetrievalCount": 0,
+    "initialAttempt": {
+      "candidateOutputsReviewed": 0,
+      "completed": false,
+      "reason": "local tool access failed; historical attempt superseded by completed #1793 AI review"
+    },
+    "independentHumanVerification": false,
+    "exhaustivePriorBankCoverageVerified": false,
+    "outputDispositions": {
+      "usableAsWritten": 17,
+      "needsRevision": 6,
+      "incorrect": 0,
+      "duplicateOrIneligible": 1,
+      "unverifiable": 0
+    },
+    "usableOriginalSlots": 17,
+    "revisionOnlyOriginalSlots": 5,
+    "sourceReport": "PRECHECK-REPLAY.md"
+  },
+  "pilot": {
+    "cohort": "12 topics, 24 candidates; paired writer arms",
+    "sourcePerArmAllocatedUsd": 0.659614,
+    "arms": [
+      {
+        "model": "Sonnet 5.5",
+        "writerAndGatesUsd": 0.356019,
+        "totalAllocatedUsd": 1.015633,
+        "auditedKeeps": 8,
+        "attempts": 12,
+        "allocatedUsdPerKeep": 0.126954125
+      },
+      {
+        "model": "Haiku 4.5",
+        "writerAndGatesUsd": 0.224766,
+        "totalAllocatedUsd": 0.88438,
+        "auditedKeeps": 5,
+        "attempts": 12,
+        "allocatedUsdPerKeep": 0.176876
+      }
+    ],
+    "limitations": [
+      "paired source retrieval half allocation",
+      "audited keep is not complete new eligible production yield",
+      "unknown historical labor",
+      "not a matched comparison with fresh cohort"
+    ]
+  },
+  "fresh": {
+    "selectedRequests": 23,
+    "intendedFrame": 24,
+    "intendedFrameDeficit": 1,
+    "breadth": {
+      "broad": 7,
+      "niche": 8,
+      "veryNarrow": 8
+    },
+    "perArm": {
+      "preparationShortages": 1,
+      "initialWriterCalls": 22,
+      "replacementCalls": 2
+    },
+    "soft": {
+      "operationalProviderResponseEstimateUsd": 0.5410001,
+      "stageUsd": {
+        "writing": 0.0136506,
+        "repairs": 0.0011395,
+        "sourceReview": 0.488242,
+        "quality": 0.037968,
+        "recordedAnthropicRetrieval": 0
+      },
+      "sourceReviewSharePct": 90.24804246801433,
+      "verifiedUsableOutcomes": null,
+      "retrospectiveSupervisedUnitCostUsd": null,
+      "automatedDelivered": 0,
+      "originalRequests": 23,
+      "automatedUnitCostUsd": null,
+      "aiReviewedUsableOutcomes": 17,
+      "aiReviewedProviderUnitCostUsd": 0.03182353529411765,
+      "aiReviewedProviderUnitCostIncludesReviewLabor": false,
+      "unitCostLimitation": "AI-reviewed provider-only estimate; independent human verification, exhaustive prior-bank novelty, preparation/review labor and complete automatic retrieval/readiness unverified"
+    },
+    "strict": {
+      "operationalProviderResponseEstimateUsd": 0.0334814,
+      "automatedDelivered": 0,
+      "originalRequests": 23
+    },
+    "controls": {
+      "providerResponseEstimateUsd": 0.389508
+    },
+    "allArms": {
+      "automatedDelivered": 0,
+      "armRequestOutcomes": 46,
+      "operationalProviderResponseEstimateUsd": 0.5744815
+    },
+    "experiment": {
+      "inferenceCalls": 101,
+      "responseReceiptEstimateUsd": 0.9639895,
+      "ledgerSettlementUsd": 0.963987,
+      "roundingDifferenceUsd": 0.0000025
+    },
+    "allocation": "shared retrieval/preparation half per arm; actual quality batch cost equally by member; controls separate; all failures and replacements retained",
+    "labor": {
+      "historicPreparationMinutes": null,
+      "historicAdjudicationMinutes": null,
+      "closeoutHumanRatingsRequested": 0
+    },
+    "retrieval": {
+      "httpAttempts": 38,
+      "rateLimitFailures": 13,
+      "anthropicProviderUsdRecorded": 0,
+      "manualCurationRequired": true
+    },
+    "readinessMeasured": false
+  },
+  "lifetime": {
+    "source": "last connected-ledger snapshot reported at #1789 and repeated in #1791; no live read during reconciliation",
+    "capUsd": 10,
+    "settledUsd": 6.396224,
+    "oldUncertainReservedUsd": 0.02,
+    "availableAfterReservationUsd": 3.583776,
+    "additionalCloseoutProviderUsd": 0,
+    "publicCategorySubtotalUsd": 6.394555,
+    "unattributedCategoryDifferenceUsd": 0.001669,
+    "liveVerified": false
+  },
+  "prospective": {
+    "ran": false,
+    "reason": "initial review/live budget access unavailable; later saved-cohort AI review completed without new generation; complete production path still unverified",
+    "paidCalls": 0
+  },
+  "decision": {
+    "productionChangeJustified": false,
+    "optimizationCandidate": "source-review stage remains cost concentration; exact-repeat/required-field precheck rejected at zero saving",
+    "optimizationImplemented": false,
+    "precheck": {
+      "adopt": false,
+      "outputsStopped": 0,
+      "sourceReviewCallsAvoided": 0,
+      "grossProviderUsdAvoided": 0
+    }
+  },
+  "cassianBaselineCommit": "4b0cd6c721318730fed3aa695a0522d5de8b5810"
+}
