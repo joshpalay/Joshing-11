@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-12
+last-reviewed: 2026-10-13
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -676,5 +676,77 @@ criteria mean.
    user), run Q3 for real and start reading the ≥14-day clock from the
    first fire.
 3. Watch whether the `tier` miss-reason share (now 11 of 100 post-deploy
+   misses) keeps tracking the other three reasons proportionally, as it has
+   every reading so far.
+
+### 2026-10-13 (diagnosis-review) — a THIRD loosened pick fired, from a DIFFERENT user for the first time; still short of a usable Q3 sample but the single-user caveat is now gone
+
+**Environment note:** no `.env`/`.env.local` present, no `ANTHROPIC_API_KEY`
+in the process environment. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available and used for all
+queries below.
+
+**Headline: a third `loosened: true` pick has fired, on the 2026-10-12
+17:05 UTC cron — and for the first time, from a different user than the
+first two.**
+
+| build_id | user | started_at (UTC) | domain | requested tier | served tier | outcome |
+|---|---|---|---|---|---|---|
+| `8cb18920…` | `e9aad9d8…` (new — neither prior fire's user) | 2026-10-12 17:05:19 | Western Music Theory | specialist | accessible | hit |
+
+Same mechanism as both prior fires (specialist requested, accessible
+served, two steps away). All three fires to date:
+
+| # | build_id | user | day | domain |
+|---|---|---|---|---|
+| 1 | `b691c375…` | `f5ed1c59…` | 2026-10-06 | Oklahoma! (Rodgers & Hammerstein Musical) |
+| 2 | `0a4f3b20…` | `f5ed1c59…` | 2026-10-11 | Color References Across Film and TV |
+| 3 | `8cb18920…` | `e9aad9d8…` | 2026-10-12 | Western Music Theory |
+
+**This resolves the specific caveat the last two entries kept naming** —
+"2 loosened picks ever, both the same user" would read very differently
+from a broader pattern; it's no longer true. n=3 across 2 users is still
+far short of the "handful, ideally across more than one user" this doc's
+plan wanted before Q3 means anything, but the single-user worry is gone.
+**Not reading this as resolving the open decisions** — still too few fires
+to tell whether loosened picks land well.
+
+**Q1 (trailing 14 days), re-run:** 2026-09-29 through 2026-10-12. Blended
+hit rate stays noisy day to day (31.4%–66.7%), with 2026-10-12 (the new
+fire day) at 46.2% (12 hits / 14 misses) — inside the existing noisy range.
+`loosened` now shows `1` on three distinct days (2026-10-06, 2026-10-11,
+2026-10-12), `0` on every other day in the window.
+
+**Q2 (gen_calls_per_build), re-run:** 2.50–5.50 across the window, with
+2026-10-12 at 5.00 (2 builds) — inside the existing noisy range, no visible
+shift tied to the new fire.
+
+**Q3 — now has three rows, still not a real sample.** Not running the full
+join for n=3 (same reasoning as every prior review); will start being
+meaningful once a handful more accumulate.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 50 (up from 46), `filtered` 31 (up from 25),
+`no_stock` 21 (up from 18), `tier` **12 (up from 11)**. 114 total
+post-deploy misses now; `tier` holds at roughly the same share (10.5%) as
+every prior reading — growing in step with the other three reasons, not
+disproportionately.
+
+**No code change since the last review** to `generate-questions.ts`,
+`build-context.ts`, or `src/server/db/queries/daily.ts` — `git log
+7d21124..HEAD` against all three returns nothing.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+still hasn't meaningfully started — three fires across two users, the most
+recent one day ago, is closer to "live" than any prior reading but still
+not there.
+
+### Next steps (revised)
+1. Watch for a fourth `loosened: true` pick — currently 3 ever, across 2
+   users (`f5ed1c59…` ×2, `e9aad9d8…` ×1), fired 2026-10-06, 2026-10-11,
+   2026-10-12.
+2. Once a handful of loosened picks exist, run Q3 for real and start
+   reading the ≥14-day clock from the first fire.
+3. Watch whether the `tier` miss-reason share (now 12 of 114 post-deploy
    misses) keeps tracking the other three reasons proportionally, as it has
    every reading so far.

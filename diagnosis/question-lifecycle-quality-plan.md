@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-12
+last-reviewed: 2026-10-13
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2360,6 +2360,73 @@ recheck logic specifically.
    isolated or recurs again.
 4. `batch_dedup`/`recent_history` `failed_open` basically flat this reading
    (26/406, 5/406) — keep watching for recurrence or further easing as the
+   rolling window moves.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-13 (diagnosis-review) — no new dispute-queue activity; `batch_dedup`/`recent_history` `failed_open` both ease slightly on the rolling window; build p50 ticks back up a little; `subject_entity` coverage holds; no new code
+
+**Environment note:** no `.env`/`.env.local` present, no `ANTHROPIC_API_KEY`
+in the process environment. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available; numbers below
+reproduce `check-question-lifecycle.mjs`'s exact queries by hand.
+
+**`#1702` dispute queue: no new activity.** `GradeDispute` status counts
+(all-time): `pending` **49** (unchanged), `alternative_added` **34**
+(unchanged), `dismissed` 5 (unchanged). `max(reviewed_at)` across the whole
+table is still **2026-10-09T21:54:03.529Z** — no human (or automated)
+review since then, now 4 days. Decision 4 (Phase 4's labeled set) remains
+exactly where it was.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0 of 590** rows generated since that
+timestamp are missing it (was 0 of 573 last review).
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 375 | 42 | 5 |
+| `batch_dedup` | 375 | 11 | **24** |
+| `quality` | 375 | 160 (42.7%) | 1 |
+
+`considered` fell 406→375 — the rolling 14-day window again (older days'
+traffic aging out, consistent with this doc's own convention, not a new
+finding). `recent_history`'s `failed_open` holds flat at 5. `batch_dedup`'s
+`failed_open` eased by two (26→24) — within the single-digit noise this
+counter has shown before, not a new pattern. `quality`'s `failed_open`
+holds flat at 1 (the 2026-10-02 event remains the only one in the 14-day
+window); scoped drop rate (42.7%) stays inside the acceptable band.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,297ms** (n=43), up slightly vs. the last reading (36,236ms, n=44) —
+still well above the 25,243ms pre-deploy baseline. Not re-deriving the
+outlier-cluster cross-check this pass (that lives in
+`daily-build-latency-deferral-plan.md`, reviewed the same session: outlier
+share actually edged DOWN to 32.9% there, the first such down-tick, with
+two new rows from the 2026-10-12 cron that didn't add a new outlier); the
+standing explanation for the elevated p50 (the untraced outlier cluster)
+is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log
+7d21124..HEAD` against all five returns nothing.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data (now 4 days since the last review).
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s rolling-window `failed_open` (flat at 1) stays
+   isolated or recurs again.
+4. `batch_dedup`/`recent_history` `failed_open` basically flat this reading
+   (24/375, 5/375) — keep watching for recurrence or further easing as the
    rolling window moves.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
