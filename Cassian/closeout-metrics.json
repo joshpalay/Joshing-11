@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "asOf": "2026-10-13",
   "status": "inconclusive_private_question_audit_unavailable",
-  "mainCommit": "4b0cd6c721318730fed3aa695a0522d5de8b5810",
+  "mainCommit": "df85d8ab0153777c8c923017c7cb455cf4a15f6e",
   "providerPricesInvoiceReconciled": false,
   "review": {
     "rubricFrozen": true,
@@ -134,5 +134,6 @@
     "productionChangeJustified": false,
     "optimizationCandidate": "source-review cost, subject to factual-quality verification",
     "optimizationImplemented": false
-  }
+  },
+  "cassianBaselineCommit": "4b0cd6c721318730fed3aa695a0522d5de8b5810"
 }
