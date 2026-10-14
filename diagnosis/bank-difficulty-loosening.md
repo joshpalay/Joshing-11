@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-13
+last-reviewed: 2026-10-14
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -750,3 +750,75 @@ not there.
 3. Watch whether the `tier` miss-reason share (now 12 of 114 post-deploy
    misses) keeps tracking the other three reasons proportionally, as it has
    every reading so far.
+
+### 2026-10-14 (diagnosis-review) — TWO more loosened picks fired on the 2026-10-13 cron (now 5 ever, across 2 users); Q3 gets its first real (if still thin) reading — not a "too easy" signal; still short of the ≥14-day firing clock
+
+**Environment note:** no `.env`/`.env.local` present; live, read-only
+Supabase MCP connection to the production project (`grixooyecvnugpxvcbct`)
+available and used for every query below.
+
+**Headline: two more `loosened: true` picks fired, both on the 2026-10-13
+17:05 UTC cron — bringing the all-time total from 3 to 5.**
+
+| # | build_id | user | day | domain | req→srv | outcome |
+|---|---|---|---|---|---|---|
+| 1 | `4f35a3af…` | `f5ed1c59…` | 2026-10-06 | Oklahoma! (Rodgers & Hammerstein) | specialist→accessible | hit |
+| 2 | `aacec47a…` | `f5ed1c59…` | 2026-10-11 | Color References Across Film and TV | specialist→accessible | hit |
+| 3 | `8cb18920…` | `e9aad9d8…` | 2026-10-12 | Western Music Theory | specialist→accessible | hit |
+| 4 | `2ab4538b…` | `f5ed1c59…` | 2026-10-13 | Oklahoma! (Rodgers & Hammerstein) — second time | specialist→accessible | hit |
+| 5 | `33f9cd16…` | `e9aad9d8…` | 2026-10-13 | American City Nicknames | specialist→accessible | hit |
+
+Same mechanism on all five (specialist requested, accessible served, two
+steps away). Still only the same two users (`f5ed1c59…` ×3, `e9aad9d8…`
+×2) — no third user yet. `f5ed1c59…`'s second fire is the SAME domain
+(Oklahoma!) as their first, five days apart.
+
+**Q3 — ran the real join for the first time, since n=5 is closer to the
+"handful" this doc's plan wanted than any prior reading.** Loosened picks:
+5 served, 2 answered correct = **40.0%**. For comparison, normal
+(non-loosened) hits served at the same `accessible` tier from the same
+30-day window: `req=accessible→srv=accessible` 25.0% (168 picks),
+`req=moderate→srv=accessible` 55.0% (20 picks). Loosened picks sit between
+those two, not above either — **not the "answered far more often than
+normal picks" signal §6/decision-2 is watching for.** Still only 5 data
+points (2 of them the same user/domain), so this is a first real look, not
+a verdict — the doc's own bar was "a handful more, ideally across more than
+one user," and this is right at that line, not past it.
+
+**Q1 (trailing 3 days):** 2026-10-11 29 hits/15 misses (loosened 1),
+2026-10-12 12 hits/14 misses (loosened 1), 2026-10-13 14 hits/10 misses
+(loosened 2) — consistent with the ordinary day-to-day noise every prior
+reading found.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 55 (up from 50), `filtered` 33 (up from 31),
+`no_stock` 22 (up from 21), `tier` **14 (up from 12)**. 124 total
+post-deploy misses now; `tier` holds at roughly the same share (11.3%) as
+every prior reading — growing in step with the other three reasons, not
+disproportionately.
+
+**Q2 (gen_calls_per_build, trailing 14 days):** 2.50–5.50 across the
+window, with 2026-10-13 at 3.50 — inside the existing noisy range, no
+visible shift tied to either new fire.
+
+**No code change since the last review** to `generate-questions.ts` or
+`build-context.ts` — `git diff --stat df85d8a..origin/main` (4 commits, all
+a "Cassian" admin-review-tool pass) against both returns nothing.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+still hasn't closed by the doc's own convention (counting from the first
+fire, 2026-10-06, today is day 8) — five fires across two users is real
+progress toward a usable sample, and Q3's first reading leans reassuring
+(not "too easy"), but it's one reading on five points, not a verdict.
+
+### Next steps (revised)
+1. Watch for a sixth `loosened: true` pick, ideally from a third user —
+   currently 5 ever, across 2 users (`f5ed1c59…` ×3, `e9aad9d8…` ×2).
+2. Keep re-running Q3 as more loosened picks accumulate — first real
+   reading (40.0% correct, n=5) doesn't trip the "too easy" concern, but
+   the sample is still thin.
+3. Watch whether the `tier` miss-reason share (now 14 of 124 post-deploy
+   misses) keeps tracking the other three reasons proportionally, as it has
+   every reading so far.
+4. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 8 —
+   watch for it to close around 2026-10-20.
