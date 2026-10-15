@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-14
+last-reviewed: 2026-10-15
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -821,4 +821,76 @@ progress toward a usable sample, and Q3's first reading leans reassuring
    misses) keeps tracking the other three reasons proportionally, as it has
    every reading so far.
 4. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 8 —
+   watch for it to close around 2026-10-20.
+
+### 2026-10-15 (diagnosis-review) — TWO more loosened picks fired on the 2026-10-14 cron (now 7 ever); first-ever UPWARD loosened pick (accessible→specialist); Q3 n=7 still not a "too easy" signal; day 9 of the ≥14-day firing clock
+
+**Environment note:** no `.env`/`.env.local` present; live, read-only
+Supabase MCP connection to the production project (`grixooyecvnugpxvcbct`)
+available and used for every query below.
+
+**Headline: two more `loosened: true` picks fired, both on the 2026-10-14
+17:05 UTC cron — bringing the all-time total from 5 to 7. One of the two is
+the first-ever UPWARD loosened pick.**
+
+| # | build_id | user | day | domain | req→srv | outcome |
+|---|---|---|---|---|---|---|
+| 6 | `06612778…` | `f5ed1c59…` | 2026-10-14 | D-Day Invasion | **accessible→specialist** | hit |
+| 7 | `df856280…` | `e9aad9d8…` | 2026-10-14 | Western Music Theory (second time, same user) | specialist→accessible | hit |
+
+`06612778…` is the first loosened pick observed going the OTHER direction —
+§2's rule allows "two steps UP ... also allowed (harder is never
+condescending)," but every prior fire (1–5) was the easier,
+specialist→accessible direction. This is the first real-world instance of
+that branch firing. `df856280…` repeats the established specialist→accessible
+shape, same user/domain pairing (`e9aad9d8…`, Western Music Theory) as fire
+#3 on 2026-10-12.
+
+**Q3 — ran the real join again, now n=7 (6 downward + 1 upward).** Downward
+loosened picks (specialist→accessible): 6 served, 3 answered correct =
+**50.0%** (was 40.0% at n=5). For comparison, normal hits at the same
+`accessible` tier (30-day window): `req=accessible→srv=accessible` 27.0%
+(174 picks), `req=moderate→srv=accessible` 52.4% (21 picks) — 50.0% still
+sits between those two, not above either, same read as every prior Q3
+reading: **not** the "answered far more often than normal" signal
+§6/decision-2 watches for. The single upward pick (`06612778…`) was
+answered correctly (1/1, 100%) — too small a sample to read, but notable
+that a HARDER served question didn't strand the player either.
+
+**Q1 (trailing 14 days):** blended hit rate stays in the same noisy range
+as every prior reading (8/14 to 29/15 across the window); 2026-10-14
+itself: 17 hits/7 misses.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 59 (up from 55), `filtered` 34 (up from 33),
+`no_stock` 22 (up from 22 — unchanged), `tier` **16 (up from 14)**. 131
+total post-deploy misses now; `tier` holds at roughly the same share
+(12.2%) as every prior reading — still tracking the other three reasons
+proportionally, not disproportionately.
+
+**Q2 (gen_calls_per_build, trailing 14 days):** 2.50–5.50 across the
+window, with 2026-10-14 at 3.50 — inside the existing noisy range, no
+visible shift tied to either new fire.
+
+**No code change since the last review** to `generate-questions.ts` or
+`build-context.ts` — the three commits on `main` since the last review
+(`a9736cd`, `6aa20d0`, `9b2b4d1`) are all a "Cassian" review-policy/
+reconciliation pass, confirmed by diffing each commit's file list; none
+touch this doc's mechanism.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+(counting from the first fire, 2026-10-06) is at day 9 — seven fires across
+two users, including the first upward one, is more data but still short of
+the clock closing (~2026-10-20).
+
+### Next steps (revised)
+1. Watch for an eighth `loosened: true` pick, ideally from a third user —
+   currently 7 ever, across 2 users (`f5ed1c59…` ×4, `e9aad9d8…` ×3).
+2. Keep re-running Q3 as more loosened picks accumulate — n=7 downward
+   reading (50.0% correct) still doesn't trip the "too easy" concern.
+3. Watch whether the upward (accessible→specialist) branch fires again, now
+   that it has a first real occurrence.
+4. Watch whether the `tier` miss-reason share (now 16 of 131 post-deploy
+   misses) keeps tracking the other three reasons proportionally.
+5. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 9 —
    watch for it to close around 2026-10-20.
