@@ -1,5 +1,7 @@
 # Cassian cost closeout
 
+**Later informed assessment, October 14:** [RECONCILIATION.md](RECONCILIATION.md) records the new working inventory and preserves the historical results below. [SOURCE-REVIEW-NEXT.md](SOURCE-REVIEW-NEXT.md) defines the remaining design and costing work before another paid comparison.
+
 **Decision, 2026-10-13:** Close this phase without changing production. The merged [pre-check replay](PRECHECK-REPLAY.md) completes the previously unavailable separate Codex AI audit: **17/23 original soft-arm slots** were judged usable as written against the captured evidence and history. The saved operational provider numerator is **$0.5410001**, including failures and two replacements, or **$0.0318235353 (about 3.2 cents) per AI-reviewed usable slot**. This is a retrospective provider-only estimate, not independently human-verified yield or all-in production cost. Preparation/review labor, automatic cold retrieval, exhaustive prior-bank novelty and readiness remain unverified. The original automated pipeline delivered **0/23**, unchanged.
 
 The conservative pre-check stopped **0/24** saved outputs and avoided **0 source-review calls and $0 gross spend**. Do not adopt it. Stop paid checker tuning until the semantic review dependency is designed and costed. The [offline verification repair](VERIFICATION-FIX.md) remains merged; its manual identity and relation bindings are reference judgments, not proof of automated semantic reliability.

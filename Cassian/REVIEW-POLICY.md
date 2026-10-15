@@ -1,5 +1,7 @@
 # Cassian owner-approved review policy
 
+**Later informed assessment, October 14:** [RECONCILIATION.md](RECONCILIATION.md) records the new working inventory and preserves the historical results below. [SOURCE-REVIEW-NEXT.md](SOURCE-REVIEW-NEXT.md) defines the remaining design and costing work before another paid comparison.
+
 Approved by the owner in chat on October 14, 2026. These three rules guide adjudication of the saved development material. They do not revise frozen scores or change production grading, writers, gates, bank or serving behavior.
 
 ## 1. Accept correct equivalent answers
