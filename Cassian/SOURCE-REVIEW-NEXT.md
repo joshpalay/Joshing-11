@@ -1,5 +1,7 @@
 # Cassian next source-review comparison
 
+**Update, October 15:** the first priced attempt is [COMPACT-REVIEW.md](COMPACT-REVIEW.md); its proposed reference failed the frozen check, so a working reference reviewer remains the open prerequisite.
+
 Design proposal, October 14, 2026. The [saved-output reconciliation](RECONCILIATION.md) is complete as an informed development assessment. This document makes the next decision concrete; it is not a frozen dispatch plan or authorization for a new production path. No paid comparison is ready yet.
 
 ## Question to answer
