@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-15",
+  "decision": "adopt-nothing",
+  "outcome": "reference-compatibility-failed",
+  "baseMain": "567e124882ac783fbf04a251763f10bbb01d4f4e",
+  "scope": "saved-case compatibility screening only; unseen comparison stopped by prerequisite",
+  "privateFreezeSha": "010350ec321a5bd54f6b222824155a34d620e4126f40700efe44649ae70a8463",
+  "reference": {
+    "configuration": "Existing v4 whole-card source reconstruction with approved answer policy in input",
+    "model": "claude-sonnet-5-5",
+    "thinking": {
+      "type": "between_tools"
+    },
+    "effort": "omitted (same existing provider default; not lowered)",
+    "transport": "same first-party SDK messages.create nonstreaming; no retries; no caching",
+    "maxOutputTokens": 3600,
+    "maxInputTokens": 13500,
+    "calls": 7,
+    "billedUsage": {
+      "inputTokens": 41305,
+      "outputTokens": 8277,
+      "cacheReadTokens": 0,
+      "cacheCreateTokens": 0
+    },
+    "providerUsd": 0.16538,
+    "inputUsd": 0.08261,
+    "outputUsd": 0.08277,
+    "parsedAndBound": 7,
+    "fieldRecords": 28,
+    "claimRecords": 35,
+    "soundCases": 2,
+    "soundRetained": 2,
+    "falseHolds": 0,
+    "determinateChallengeCases": 4,
+    "challengeHolds": 4,
+    "challengeCompleteCorrectReasons": 3,
+    "determinateCompleteCorrectResults": 5,
+    "determinateCases": 6,
+    "unsupportedChronologyAccepted": 1,
+    "policyUnresolvedCases": 1,
+    "policyUnresolvedPasses": 1,
+    "unsafePassesUnambiguous": 0,
+    "unsafePassesHistoricalPreciseInterpretation": 1,
+    "materialClaimOmissionsObserved": 0,
+    "requiredEvidenceGaps": {
+      "cases": 1,
+      "gaps": 2
+    },
+    "silentlyChangedRelationships": 1,
+    "latencyMs": {
+      "sum": 54178,
+      "mean": 7739.714285714285,
+      "min": 6312,
+      "max": 9791
+    },
+    "truncations": 0,
+    "finalResponses": 7
+  },
+  "candidate": {
+    "frozen": true,
+    "change": "Global evidence quote pool with per-claim indices; omit redundant field-level reason; retain claim and acceptance reasons and all judgments",
+    "calls": 0,
+    "providerUsd": 0,
+    "billedUsage": null,
+    "costReductionUsd": null,
+    "costReductionPercent": null,
+    "reason": "Compatibility gate failed; conditional comparison prohibited"
+  },
+  "unseenEvaluation": {
+    "preparedBaseCards": 0,
+    "executedCases": 0,
+    "plannedIfGatePassed": {
+      "bases": 6,
+      "cases": 6,
+      "breadth": {
+        "broad": 2,
+        "niche": 2,
+        "veryNarrow": 2
+      },
+      "sound": 3,
+      "defects": 3
+    },
+    "reasonNotPrepared": "Stop condition reached before unseen evaluation preparation; no saved case relabeled unseen",
+    "creationYieldMeasured": false
+  },
+  "thinkingAccounting": {
+    "historicalExactSplit": null,
+    "historicalReceiptCount": 101,
+    "historicalCompleteBlocksRetained": 0,
+    "newCompleteResponsesRetained": 7,
+    "newBlockTypes": ["text"],
+    "providerExposedThinkingTokens": 0,
+    "providerExposedVisibleTokens": null,
+    "visibleTokenCountInferred": false,
+    "note": "Provider explicitly reports zero thinking tokens for each new response. No separate visible-token field; aggregate output retained. Historical between_tools setting is not a token split."
+  },
+  "budget": {
+    "taskCapUsd": 1.5,
+    "worstCaseReservedBeforeDispatchUsd": 1.197,
+    "compatibilityEnvelopeUsd": 0.441,
+    "conditionalEnvelopeUsd": 0.756,
+    "conditionalEnvelopeSettledUndispatchedUsd": 0,
+    "experimentProviderUsd": 0.16538,
+    "preparationProviderUsd": 0,
+    "compatibilityProviderUsd": 0.16538,
+    "comparisonProviderUsd": 0,
+    "retryProviderUsd": 0,
+    "adjudicationAnthropicUsd": 0,
+    "taskAuthorizationUnspentUsd": 1.33462,
+    "lifetimeCapUsd": 10,
+    "beforeSettledUsd": 6.396224,
+    "afterSettledUsd": 6.561604,
+    "olderUncertainUsd": 0.02,
+    "newReservedUsd": 0,
+    "availableAfterReservationsUsd": 3.418396,
+    "olderLedgerRowsUnchanged": 18,
+    "invoiceReconciled": false
+  },
+  "batch": {
+    "pricingVerifiedDate": "2026-10-15",
+    "pricingUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "discountInputOutput": 0.5,
+    "modelStandardPerM": {
+      "input": 2,
+      "output": 10
+    },
+    "modelBatchPerM": {
+      "input": 1,
+      "output": 5
+    },
+    "cassianOperatingEligibleShare": null,
+    "telemetryWindowDays": 14,
+    "telemetryAt": "2026-10-15T10:58:57.769Z",
+    "telemetryAllCalls": 2313,
+    "telemetryAllProviderUsd": 14.63077645,
+    "knownBackgroundVerificationCalls": 408,
+    "knownBackgroundVerificationProviderUsd": 1.9910833500000003,
+    "knownBackgroundShareOfCalls": 0.17639429312581065,
+    "knownBackgroundShareOfObservedSpend": 0.1360887002001866,
+    "alreadyBatchCalls": 383,
+    "remainingSyncVerificationCalls": 25,
+    "remainingSyncTokenDiscountIllustrationUsd": 0.13143475,
+    "remainingSyncTokenDiscountShareOfObservedSpend": 0.008983443253963462,
+    "webSearchDiscountApplied": false,
+    "newMeasuredCompatibilityBatchTokenIllustrationUsd": 0.08269,
+    "workingReviewerForecastUsd": null,
+    "gameWideSavingsForecast": null
+  },
+  "effort": {
+    "humanReviewMinutes": null,
+    "humanReviewPerformed": false,
+    "coordinatorActiveMinutes": null,
+    "separateAiReviewActiveMinutes": null,
+    "codeAndEvidencePreparationProviderUsd": 0,
+    "anthropicEvaluationOnlyUsd": 0.16538,
+    "recurringMeasuredOperatingUsd": null,
+    "agentInteractionCostUsd": null,
+    "exceptionReviewMinutes": null,
+    "note": "Agent interaction and parallel AI review not metered as human labor or charged as zero. Known-case preparation finished within approximately 60-minute cap; no unseen card generation performed."
+  },
+  "safety": {
+    "productionChanged": false,
+    "bankPromotions": 0,
+    "retries": 0,
+    "transportChanges": 0,
+    "completedResumeAdditionalCalls": 0,
+    "completedResumeAdditionalTokenCounts": 0,
+    "olderUncertaintyTouched": false
+  }
+}
