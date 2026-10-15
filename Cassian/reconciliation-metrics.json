@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "reviewType": "informed nonblind coordinator AI reconciliation",
+  "independentReview": false,
+  "fullCardHumanVerification": false,
+  "originalRequests": 23,
+  "realOutputs": 24,
+  "calibrationExamples": 31,
+  "calibrationCountsTowardYield": false,
+  "outputs": {
+    "provisionalRequestedTier": 11,
+    "likelyRetier": 3,
+    "baselineUnresolved": 5,
+    "textRevision": 4,
+    "sameSlotDuplicate": 1
+  },
+  "requests": {
+    "provisionalRequestedTier": 10,
+    "likelyRetier": 3,
+    "baselineUnresolved": 5,
+    "textRevision": 4,
+    "preparationShortage": 1
+  },
+  "contentBeforeTierDecisions": {
+    "outputsIncludingRepeatedFact": 20,
+    "distinctCandidateFacts": 19,
+    "originalRequests": 18,
+    "independentlyVerified": false
+  },
+  "historicalAiRequestedSlotKeeps": [
+    17,
+    11
+  ],
+  "frozenAutomated": {
+    "softKeeps": 0,
+    "softRequests": 23,
+    "bothArmKeeps": 0,
+    "bothArmRequests": 46
+  },
+  "historicalSoftProviderUsd": 0.5410001,
+  "providerOnlyUsdPerProvisionalRequestedSlot": 0.05410001,
+  "ratioIsProductionCost": false,
+  "sourceReview": {
+    "calls": 24,
+    "providerUsd": 0.488242,
+    "percentOfSoft": 90.24804246801433
+  },
+  "otherSoftProviderUsd": 0.0527581,
+  "allInProductionCostUsd": null,
+  "humanReviewMinutes": null,
+  "reconciliationLaborMinutes": null,
+  "reviewProviderCostUsd": null,
+  "preservation": {
+    "originalInputs": 58,
+    "additionalReviewArtifacts": 7,
+    "allHashesMatch": true,
+    "semanticJudgmentsMachineValidated": false
+  },
+  "newPaidCalls": 0,
+  "productionChanged": false,
+  "budget": {
+    "status": "historical snapshot; not freshly verified",
+    "settledUsd": 6.396224,
+    "uncertainReservedUsd": 0.02,
+    "availableUsd": 3.583776
+  }
+}
