@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-15
+last-reviewed: 2026-10-16
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -894,3 +894,74 @@ the clock closing (~2026-10-20).
    misses) keeps tracking the other three reasons proportionally.
 5. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 9 —
    watch for it to close around 2026-10-20.
+
+### 2026-10-16 (diagnosis-review) — TWO more loosened picks fired on the 2026-10-15 cron (now 9 ever, still 2 users); Q3 downward rate eases to 37.5% (n=8), still between the two baseline reference points; day 10 of the ≥14-day firing clock
+
+**Environment note:** no `.env`/`.env.local` present; live, read-only
+Supabase MCP connection to the production project (`grixooyecvnugpxvcbct`)
+available and used for every query below.
+
+**Headline: two more `loosened: true` picks fired, both on the 2026-10-15
+17:05 UTC cron — bringing the all-time total from 7 to 9. Both repeat
+already-established shapes; no third user yet.**
+
+| # | build_id | user | day | domain | req→srv | outcome |
+|---|---|---|---|---|---|---|
+| 8 | `21161620…` | `f5ed1c59…` | 2026-10-15 | Oklahoma! (Rodgers & Hammerstein Musical) (3rd time, same user) | specialist→accessible | hit |
+| 9 | `5617d936…` | `e9aad9d8…` | 2026-10-15 | Western Music Theory (3rd time, same user) | specialist→accessible | hit |
+
+Still only two users ever (`f5ed1c59…` ×5, `e9aad9d8…` ×4), and still only
+the one upward (accessible→specialist) occurrence from 2026-10-14 — neither
+new fire breaks new ground, they're repeats of each user's own
+previously-seen domain.
+
+**Q3 — ran the real join again, now n=9 (8 downward + 1 upward).** Downward
+loosened picks (specialist→accessible): 8 served, 3 answered correct =
+**37.5%** (down from 50.0% at n=6). For comparison, normal hits at the same
+tier pairs (30-day window): `req=accessible→srv=accessible` 25.4% (173
+picks), `req=moderate→srv=accessible` 52.2% (23 picks) — 37.5% still sits
+between those two, same read as every prior Q3 reading: **not** the
+"answered far more often than normal" signal §6/decision-2 watches for. The
+single upward pick stays n=1, 100% — unchanged, still too small to read.
+
+**Q1 (trailing 14 days):** 2026-10-15 itself: 17 hits/5 misses, 77.3% hit
+rate — the highest single day in the current window, but no `.env`-free way
+to attribute that to the loosening specifically (loosened picks are still
+~5% of that day's attempts). No 2026-10-16 row yet — today's cron hasn't run
+as of this review.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 62 (up from 59), `filtered` 35 (up from 34),
+`no_stock` **23 (up from 22 — first move in several reviews)**, `tier` 16
+(unchanged). 136 total post-deploy misses now; `tier` share is 11.8%,
+essentially flat vs. the last few readings (12.2%, 12.2%) — still tracking
+the other three reasons proportionally, not disproportionately.
+
+**Q2 (gen_calls_per_build, trailing 14 days):** 2026-10-15 reads 2.00 (n=2
+builds that day) — a new low in the window (prior range 2.50–5.50), but on
+only 2 builds that's a thin sample, not a trend break.
+
+**No code change since the last review** to `generate-questions.ts` or
+`build-context.ts` — `git log` on both shows nothing past the 2026-10-07
+commit that already carries them; the three commits on `main` since the
+last review (`a9736cd`, `6aa20d0`, `9b2b4d1`) are all the "Cassian"
+review-policy/reconciliation pass, confirmed by diffing each commit's file
+list — none touch this doc's mechanism.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+(counting from the first fire, 2026-10-06) is at **day 10** — four days from
+closing (~2026-10-20); the next review or two should have enough runway to
+make the keep/raise/off call.
+
+### Next steps (revised)
+1. Watch for a 10th `loosened: true` pick, ideally from a third user —
+   currently 9 ever, still only 2 users (`f5ed1c59…` ×5, `e9aad9d8…` ×4).
+2. Keep re-running Q3 as more loosened picks accumulate — n=8 downward
+   reading (37.5% correct) still doesn't trip the "too easy" concern.
+3. Watch whether the upward (accessible→specialist) branch fires again —
+   still just the one 2026-10-14 occurrence.
+4. Watch whether the `tier` miss-reason share (now 16 of 136 post-deploy
+   misses) keeps tracking the other three reasons proportionally.
+5. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 10,
+   closing ~2026-10-20 — **be ready to make the §6 keep/raise/off call within
+   the next review or two.**

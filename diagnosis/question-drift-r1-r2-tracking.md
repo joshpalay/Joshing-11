@@ -2,7 +2,7 @@
 name: question-drift-r1-r2-tracking
 status: active
 opened: 2026-09-11
-last-reviewed: 2026-10-15
+last-reviewed: 2026-10-16
 owner: Josh
 related-pr: "#1654, #1662, #1666, #1683, #1698, #1742"
 ---
@@ -3023,5 +3023,90 @@ a twentieth straight review.
    of which way it goes.
 5. Get a real reading on short-queue / `generation_failed` build counts —
    still the one Phase 1 exit criterion never checked, now 27 days past its
+   checkpoint date.
+6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).
+
+### 2026-10-16 (diagnosis-review) — Phase 1 still clean; Phase 3's favorable gap narrows again (+5.3→+3.9pts), still positive; Phase 2 hand read overdue for a twenty-first straight review; no new relevant code
+
+**Environment note:** no `.env`/`.env.local` present. Live, read-only
+Supabase MCP connection to the production project (`grixooyecvnugpxvcbct`)
+available. Deploy was 2026-09-11T19:14:09Z, so this review lands at
+deploy+~34.9 days.
+
+**Phase 1 SQL, re-run:**
+
+| Metric | 2026-10-15 reading | Now | Target | Read |
+|---|---:|---:|---:|---|
+| Rows since deploy (`is_duplicate=false`) | 685 | **705** | — | ordinary generation (+20) |
+| Mean words/question | 29.2 | **29.1** | ≤24 | still barely moved |
+| Rows over 25 words | 60% | **59%** | ≤45% | still barely moved |
+| Rows opening "In …" | 0% | **0%** | watch only | unchanged |
+| Accessible share of new rows | 50% | **50%** | 30-45% | still above target band, flat |
+
+**Quality-gate drop rate since deploy:** 366/895 = **40.9%** (considered
+895, up from 889; dropped 366, up from 364) — inside the 35-45% acceptable
+band (decision 2's actual trip line, `>45%`), essentially flat versus the
+last reading (40.9%). `difficulty_floor`: 6/895 = **0.67%**, well under the
+5% stop condition, no new deflections (same 6 as last reading, denominator
+just grew). `answer_shape`: 0/895, flat. `failed_open` on `quality` reads
+**2** for the whole window — unchanged, no further recurrence beyond the
+single 2026-10-02 `daily_build`-scope event already traced in this doc's
+sibling reviews.
+
+*(Cross-reference, not a change to this doc's own threshold: today's
+`question-lifecycle-quality-plan.md` review flags that gate's own
+**trailing-14-day** `quality` drop rate at 46.1%, above an informal
+45%-watch line that doc's 2026-10-15 entry set for itself. That is a
+different window (14-day rolling vs. this doc's since-deploy cumulative)
+and that doc's informal line is not the same thing as this doc's §2
+decision-2 trip line — this doc's own since-deploy rate stays flat at
+40.9%, nowhere near 45%. Noting the cross-reference since both track the
+same underlying gate; not treating it as evidence against decision 2 here.)*
+
+**None of Phase 1's checkable stop conditions trip.** The short-queue /
+`generation_failed` build-count criterion remains unchecked (needs Vercel
+function logs), now 28 days past its checkpoint date.
+
+**Phase 3 (correct-rate) — the favorable gap narrows again, still
+positive.** Accessible-tier mean `empirical_correct_rate`, post-deploy
+cohort now **0.800** (114 rows/200 answers, up from 112/198), pre-deploy
+cohort **0.761** (92 rows/217 answers, unchanged this reading). Post-deploy
+now exceeds pre-deploy by **3.9 points** (was 5.3, then 3.7, then 6.8) —
+the single-reading swings continue to be consistent with ordinary noise on
+a thin sample rather than a real trend either way. Per Josh's 2026-09-22
+resolution of decision 3, this does not call "accept" into question; not
+reopening decision 3.
+
+**Phase 2's hand read remains due and was again not performed this
+pass** — same out-of-scope reasoning as every prior entry (needs a seeded
+random sample and a human labeller; this skill's own instruction is
+reconnaissance only). Now due for a **twenty-first** consecutive review
+without being run.
+
+**No new relevant code:** `git log` on `generate-questions.ts` and
+`adaptive-difficulty.ts` shows nothing past the 2026-10-07 commit this doc
+already logged — the three commits on `main` since the last review
+(`a9736cd`, `6aa20d0`, `9b2b4d1`) are all a "Cassian" review-policy/
+reconciliation pass, none touching either file.
+
+**No decision-resolving change; all five open decisions in §2 are exactly
+where 2026-10-15 left them** (decision 3 already resolved 2026-09-22).
+Status stays `active`. Phase 2's hand read is due and unperformed, now for
+a twenty-first straight review.
+
+### Next steps (unchanged)
+1. **Leading item, now overdue for a twenty-first review:** Phase 2's hand
+   read is due (both the 14-day date mark and the 200-row mark passed as of
+   2026-09-26) but has not been performed — needs a seeded random sample and
+   a human labeller, per §4 Phase 2.
+2. Watch whether `failed_open` recurs on the shared `quality` gate again —
+   flat at 2 since the 2026-10-02 event, no new occurrence.
+3. Keep watching accessible share — 50% this reading, settled in the
+   established noise band.
+4. Watch whether Phase 3's gap (post now +3.9pts over pre, narrowed again)
+   recovers or keeps narrowing; decision 3 stays resolved (accept) regardless
+   of which way it goes.
+5. Get a real reading on short-queue / `generation_failed` build counts —
+   still the one Phase 1 exit criterion never checked, now 28 days past its
    checkpoint date.
 6. Everything else in §2/§4 unchanged (R5 stays off pending Phase 2).

@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-15
+last-reviewed: 2026-10-16
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3731,3 +3731,99 @@ recommended-but-unrun blind-labeling pass, now at 106 of 769.
 4. The six open `ContentReport` rows remain unaddressed, now 39 days old.
 5. The generalized cross-domain audit (other tightly-paired domains) still
    not started.
+
+### 2026-10-16 (diagnosis-review) — 39 clean days on `answer_leak_partial`; `quality` gate's cumulative diverges from yesterday's number (methodology note, not a new incident); everything else incremental, no decision-resolving change
+
+**Environment note:** no `.env`/`.env.local` in this container (fresh
+container this session); `DATABASE_URL` and `ANTHROPIC_API_KEY` both absent
+from `process.env`. Used the live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) for every query below.
+
+**Category-integrity hard-failure checks, reproduced directly against the
+live DB:** zero `orphanEdges`, zero `KnowledgeNode` rows with more than one
+label per `domain_key`, zero `domain_merged` events in the last 24h.
+**Verdict: `ok`.**
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), scope
+`daily_build`+`non_player`, day > flip:**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 903 | 0 | 0 |
+| `domain_drift` | 903 | 1 | 0 |
+| `answer_leak_single_word` | 858 | 2 | 0 |
+| `answer_leak_any_token` | 775 | 106 | 0 |
+| `answer_shape` | 903 | 1 | 0 |
+| `quality` | 903 | 368 | 2 |
+
+`answer_leak_partial` now at **39 consecutive clean days** — 0 drops
+confirmed across every scope (`daily_build`, `non_player`, and the small
+pre-flip `unknown` remainder), not just this table's filtered view.
+`domain_drift` still hasn't produced a second hit (still 1, same 2026-10-01
+row; its Vercel log still hasn't been pulled by anyone).
+`answer_leak_single_word` gained 6 considered, no new drop (still 2).
+`answer_leak_any_token` dropped count unchanged at 106 (775 considered, +6 —
+ordinary generation); the recommended blind-labeling pass (open decision 6)
+remains unrun, now **21 days** past its 2026-09-25 recommendation.
+
+**Methodology note, not a new incident:** this review's `quality` row
+(903/368/2) diverges sharply from yesterday's reported 955/388/231. Traced
+directly, not assumed: `quality`'s `failed_open` has exactly three non-zero
+days in its **entire** history — 229 on 2026-09-07 (`scope='unknown'`, the
+credit-exhaustion incident), 1 on 2026-09-25 (`scope='non_player'`), 1 on
+2026-10-02 (`scope='daily_build'`) — summing to **231 across ALL scopes and
+ALL time**, which confirms this doc's long-tracked "231, unchanged since
+2026-10-03" figure IS the correct, fully-unscoped, all-time total, not an
+artifact. But `quality`'s `considered`/`dropped` totals climb much higher
+(1,563/574) once the old `scope='unknown'` legacy rows are included — those
+rows are dated 2026-07-09 through 2026-09-09 (confirmed by querying
+`min(day)`/`max(day)` on that scope directly), i.e. static pre-flip history,
+not new traffic. Prior entries' "955/388" number appears to mix filters
+inconsistently across review sessions — the same scope-tracking ambiguity
+the 2026-09-26 entry first flagged, now reproduced concretely. **Nothing
+here changes any open decision:** every gate's own drop count (0 for
+partial-leak, 1 for domain-drift) is identical under every filter tried.
+Recommend future reviews standardize on `scope IN ('daily_build',
+'non_player') AND day > '2026-09-07'`, matching `check-gate-flags.mjs`'s own
+convention, and ignore `quality`'s legacy `unknown`-scope rows entirely so
+the cumulative table stops jumping between reviews.
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+`generated_question_id`, all still `status='open'`**, now **40 days**
+since filing (`139e1932…`, `800c44a3…`, `357618e3…`, `b1804847…`,
+`3c3f9989…`, `815b3ad8…`).
+
+**Bank `still_servable` (is_duplicate=false): 2,901**, up from 2,881 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** `git log` on
+`self-answering.ts`, `off-domain-second-opinion.ts`, `generate-questions.ts`,
+`sweep-bank-quality.ts`, `rewrite-bank-demotions.ts`,
+`quality-gate.eval.test.ts`, and `domain-drift.eval.test.ts` shows nothing
+since commit `c09888a` (#1772, 2026-10-11), which this doc already logged on
+2026-10-12. The three commits on `main` since the last review's commit
+(`a9736cd`, `6aa20d0`, `9b2b4d1`, a "Cassian" review-policy/reconciliation
+pass) touch only `Cassian/*` and `.gitignore` — confirmed by reading each
+commit's file list directly.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment. Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 106 of 775.
+
+### Next steps (unchanged, plus one)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 39+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 106 of
+   775) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 40 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.
+6. **New:** standardize the `GateDropStat` query methodology across review
+   sessions (see methodology note above) so the cumulative table stops
+   diverging between reviews.

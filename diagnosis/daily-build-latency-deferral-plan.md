@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-15
+last-reviewed: 2026-10-16
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -3172,6 +3172,114 @@ unresolved.
    function logs. Ranking unchanged at the top: `90da8604-…` (82.9s) #1;
    `a1e79665-…` (64.4s) #2; `05589486-…` (60.6s) #3; today's new outlier
    (16.0s) lands near the bottom of the set.
+3. The three `deferred: false` rows still need a Vercel-log trace of why
+   `after()` was unavailable on those builds specifically — no new
+   occurrence since 2026-10-05.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+5. Question 4 (is the bonus worth its cost) — unresolved.
+
+### 2026-10-16 (diagnosis-review) — two new rows from the 2026-10-15 cron, one a MAJOR new outlier (40.0s residual, now #7 all-time); a ranking correction: `459c10fc-…` (54.1s) has been missing from this doc's stated top-5 for weeks; `verify:build-latency-anomaly` now sixteen reviews overdue; still zero lost-persist-race rows; no code touches the persist mechanism
+
+**Environment note:** no `.env`/`.env.local` present, so `npm run
+check:build-latency` can't run directly — reproduced its exact queries
+(totals by outcome, `saved`/bonus-cost/residual via `jsonb_array_elements`
+over `rounds` filtered to `phase='bonus'`) directly against the live DB via
+the Supabase MCP connection. `verify:build-latency-anomaly` stays unrun per
+this doc's own §7 convention (write-capable) — now overdue for a
+**sixteenth** consecutive review.
+
+**`DailyBuildMetric` totals:** `built=92` (up from 90), `carry_forward=930`
+(up from 905), `existing_queue=79` (up from 78), `partial_carry_forward=5`
+(unchanged). **`outcome='lost_persist_race'` is still 0 rows** (absent from
+the outcome breakdown entirely), cumulative, all time — no change from
+every prior reading.
+
+**Two new rows, both from the 2026-10-15 17:05 UTC cron, both
+`deferred=true`:**
+
+| build_id | span_ms | user_visible_ms | saved | bonus cost | residual | Phase 3a |
+|---|---:|---:|---:|---:|---:|---|
+| `21161620-…` | 65,683 | 57,322 | 8,361 | 7,066 | 1,295 — normal band | PASS |
+| `5617d936-…` | 59,047 | 18,258 | 40,789 | 746 | **40,043 — MAJOR new outlier** | PASS |
+
+(`21161620-…` is the eighth loosened-bank-pick fire and `5617d936-…` is the
+ninth — both from today's `bank-difficulty-loosening.md` review, also run
+this session; cross-referencing, not re-deriving.)
+
+**One of two is a new outlier, and it's the biggest since 2026-10-07:**
+`5617d936-…`'s 40,043ms residual is the classic small-bonus/huge-residual
+shape (bonus cost only 746ms — among the smallest bonus costs on record —
+against a 40,789ms saving), and it's large enough to land at **#7 all-time
+by residual**, not near the bottom of the set like the last several new
+entries.
+
+**Ranking correction, found while re-deriving the full top-10 directly by
+SQL rather than carrying the stated list forward:** this doc's "top of the
+ranking" line has read `90da8604-…` (82.9s) #1, `a1e79665-…` (64.4s) #2,
+`05589486-…` (60.6s) #3, `00bc82e4-…` (45.6s) #4, `4d51ac28-…` (41.4s) #5
+for multiple consecutive reviews. **That list is missing a row:**
+`459c10fc-c8d4-…` (2026-09-28, same day as `05589486-…`) has a residual of
+**54,109ms**, which sits between `05589486-…` (60,575ms) and `00bc82e4-…`
+(45,623ms) — it should have been #4 all along, pushing `00bc82e4-…` to #5
+and `4d51ac28-…` to #6. Verified this is pre-existing data (`started_at
+2026-09-28 17:05:19`), not something that just appeared — the omission is
+an error in how this doc's ranking got carried forward, not a data change.
+**Corrected full top-10 by residual, verified directly:**
+
+| rank | build_id | date | residual |
+|---|---|---|---:|
+| 1 | `90da8604-…` | 2026-09-27 | 82,878 |
+| 2 | `a1e79665-…` | 2026-10-06 | 64,383 |
+| 3 | `05589486-…` | 2026-09-28 | 60,575 |
+| 4 | `459c10fc-…` | 2026-09-28 | **54,109 — previously missing from this doc's stated ranking** |
+| 5 | `00bc82e4-…` | 2026-10-01 | 45,623 |
+| 6 | `4d51ac28-…` | 2026-10-07 | 41,354 |
+| 7 | `5617d936-…` | 2026-10-15 | 40,043 — today's new row |
+| 8 | `84e717bd-…` | 2026-09-09 | 37,506 |
+| 9 | `a266e2b2-…` | 2026-10-11 | 31,452 |
+| 10 | `4f9efefa-…` | 2026-09-25 | 30,479 |
+
+Not acting on this beyond correcting the record here — the trace-the-outliers
+next step (needs Vercel logs) is unchanged either way, now with one more
+named row in scope.
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+`deferred:true` population via SQL:** now **30**, of **88** (up from 29 of
+86) — share rises slightly to **34.1%** (was 33.7%), still inside the
+established ~⅓ noise band.
+
+**3b population: median saving 15,627ms** (n=88, unchanged from the last
+review's 15,627ms at n=86 — the two new values straddled the existing
+median).
+
+**Phase 3a (mechanism) holds on both new rows** (`saved ≥` each build's own
+bonus cost).
+
+**No third occurrence of anything new on the `deferred: false` front** —
+still exactly 3 rows, same as every review since 2026-10-05.
+
+**No commits touch this doc's tracked mechanism since the last review.**
+`git log` on `queue-orchestrator.ts`, `src/server/db/queries/daily.ts`'s
+persist logic, `build-context.ts`, and
+`scripts/build-latency-anomaly.verify.ts` shows nothing past the
+2026-10-07 `#1756` commit this doc already logged. The three commits on
+`main` since the last review (`a9736cd`, `6aa20d0`, `9b2b4d1`) are all the
+"Cassian" review-policy/reconciliation pass, confirmed by diffing each
+commit's file list.
+
+**No decision-resolving change.** Status stays `active`. A single large
+outlier and a ranking correction are both more precision on an already-open
+question, not new evidence resolving it — Question 4 (is the bonus worth
+its cost) remains open and unresolved.
+
+### Next steps (unchanged, plus the ranking fix)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **sixteen** reviews overdue.
+2. Trace the thirty outsized/elevated-residual builds — needs Vercel
+   function logs. **Corrected top-5:** `90da8604-…` (82.9s) #1; `a1e79665-…`
+   (64.4s) #2; `05589486-…` (60.6s) #3; `459c10fc-…` (54.1s) #4 — newly
+   added to this list, was previously omitted; `00bc82e4-…` (45.6s) #5.
+   Today's new outlier (`5617d936-…`, 40.0s) lands at #7.
 3. The three `deferred: false` rows still need a Vercel-log trace of why
    `after()` was unavailable on those builds specifically — no new
    occurrence since 2026-10-05.

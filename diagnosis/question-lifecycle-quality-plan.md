@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-15
+last-reviewed: 2026-10-16
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2565,5 +2565,88 @@ touch any of the five tracked files.
    closest to the 45% band edge of any reading yet.
 4. `batch_dedup`/`recent_history` `failed_open` eased this reading (20/333,
    5/333) — rolling-window easing, not a reversal; keep watching.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-16 (diagnosis-review) — a new pending dispute (now 51, no review activity for a 7th day); `quality`'s scoped drop rate ticks past the informal 45% watch-line (46.1%) — flagging, not a formal decision; build p50 byte-identical again; `subject_entity` coverage holds; no new code
+
+**Environment note:** no `.env`/`.env.local` present, no `ANTHROPIC_API_KEY`
+in the process environment. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available; numbers below
+reproduce `check-question-lifecycle.mjs`'s exact queries by hand.
+
+**`#1702` dispute queue: one new pending submission, no review activity for
+a 7th day.** `GradeDispute` status counts (all-time): `pending` **51** (up
+from 50), `alternative_added` 34 (unchanged), `dismissed` 5 (unchanged).
+`max(reviewed_at)` across the whole table is still
+**2026-10-09T21:54:03.529Z** — no human (or automated) review since then.
+Decision 4 (Phase 4's labeled set) remains exactly where it was.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0** rows generated since that
+timestamp are missing it.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 241 | 27 | 4 |
+| `batch_dedup` | 241 | 2 | 15 |
+| `quality` | 241 | 111 (46.1%) | 0 |
+
+`considered` fell 333→241 — the rolling 14-day window again (2026-10-02's
+traffic aged out of the window, consistent with this doc's own convention,
+not a new finding). `recent_history`'s `failed_open` eased slightly (5→4).
+`batch_dedup`'s `failed_open` eased further (20→15), same rolling-window
+mechanism. `quality`'s `failed_open` dropped to 0 (the 2026-10-02 event that
+held it at 1 for several reviews has now aged out of the 14-day window
+entirely — expected, not a new absence of failures).
+
+**Flagging, not deciding: `quality`'s scoped drop rate is now 46.1%,
+crossing the informal "closer look if it crosses 45%" line the last entry
+set.** That 35–45% range is **not** one of this doc's six formal open
+decisions in §2 — it was an ad hoc watch-threshold a prior review session
+introduced on 2026-10-15 after noticing the rate had been climbing
+(37.9%→38.9%→...→44.4% across many prior readings) without ever being
+formally defined anywhere earlier in this doc. Treating the cross as
+informational: the rate has been on a slow upward drift for weeks, this is
+one more tick in that drift, and it isn't connected here to any specific
+code change or incident (no commits touch the quality-gate path — see
+below). Not changing status or taking any action on it; noting it in case
+the drift continues and someone wants to look at why the quality gate's
+drop share has been trending up since late September.
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,297ms** (n=37), byte-identical to the last reading (37,297ms, n=39) —
+still well above the 25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s reading today (also run this
+session): outlier share rises slightly to 34.1%, with one major new outlier
+from the 2026-10-15 cron; the standing explanation for the elevated p50
+(the untraced outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log` on all five
+shows nothing past the 2026-10-07 commit this doc already logged. The three
+commits on `main` since the last review (`a9736cd`, `6aa20d0`, `9b2b4d1`)
+are all a "Cassian" review-policy/reconciliation pass, confirmed by diffing
+each commit's file list; none touch any of the five tracked files.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged, still no
+   human-reviewed dispute in the data (now 7 days since the last review
+   activity).
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s scoped drop rate keeps climbing past 46.1% —
+   the informal 45% line is now crossed; worth root-causing the slow upward
+   drift if it continues, though it isn't one of the six formal decisions.
+4. `batch_dedup`/`recent_history` `failed_open` both eased this reading
+   (15/241, 4/241) — rolling-window easing, not a reversal; keep watching.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.
