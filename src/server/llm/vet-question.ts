@@ -102,6 +102,18 @@ function asPassFail(value: unknown): 'pass' | 'fail' | null {
   return value === 'pass' || value === 'fail' ? value : null;
 }
 
+/** The exact request vetQuestion sends — shared with the batch sweep (vet-batch.ts). */
+export function buildVetRequestParams(input: VetQuestionInput) {
+  // ~700 tokens — below Haiku's 2048 cacheable threshold; plain string.
+  return {
+    model: HAIKU_MODEL,
+    max_tokens: 400,
+    temperature: 0,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user' as const, content: buildUserMessage(input) }],
+  };
+}
+
 export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> {
   const client = getAnthropicClient();
   if (!client) {
@@ -110,14 +122,7 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
 
   let response;
   try {
-    // ~700 tokens — below Haiku's 2048 cacheable threshold; plain string.
-    response = await loggedMessagesCreate(client, 'vet-question', {
-      model: HAIKU_MODEL,
-      max_tokens: 400,
-      temperature: 0,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(input) }],
-    }, { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
+    response = await loggedMessagesCreate(client, 'vet-question', buildVetRequestParams(input), { timeoutMs: HAIKU_GATE_TIMEOUT_MS });
   } catch (error) {
     console.warn('[vetQuestion] request_failed', {
       message: error instanceof Error ? error.message : String(error),
@@ -125,7 +130,12 @@ export async function vetQuestion(input: VetQuestionInput): Promise<VetVerdict> 
     return { status: 'needs_review', score: null, reason: 'llm_error' };
   }
 
-  const parsed = parseJsonObject(extractTextContent(response.content));
+  return parseVetResponse(extractTextContent(response.content));
+}
+
+/** Map the vetter's raw text reply onto a verdict. Pure; shared with the batch sweep. */
+export function parseVetResponse(text: string): VetVerdict {
+  const parsed = parseJsonObject(text);
   if (!parsed) {
     return { status: 'needs_review', score: null, reason: 'invalid_llm_json' };
   }

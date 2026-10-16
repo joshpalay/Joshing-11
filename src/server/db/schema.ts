@@ -2500,6 +2500,30 @@ export const verifyBatchRun = pgTable(
   ],
 );
 
+// 0155 — Batch-API tracking for the vet-questions ('vet') and backfill-supply
+// ('backfill') crons. Same two-phase harvest-then-submit shape as
+// VerifyBatchRun, kept separate so the batch-verify path is untouched. payload
+// holds what harvest needs beyond the custom_id (e.g. the backfill plan).
+export const cronBatchRun = pgTable(
+  'CronBatchRun',
+  {
+    id: id(),
+    kind: text('kind').notNull(),
+    providerBatchId: text('provider_batch_id').notNull(),
+    status: text('status').notNull().default('submitted'),
+    requestCount: integer('request_count').notNull().default(0),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    harvestedAt: timestamp('harvested_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('CronBatchRun_kind_valid', sql`kind IN ('vet', 'backfill')`),
+    check('CronBatchRun_status_valid', sql`status IN ('submitted', 'harvested', 'failed')`),
+    uniqueIndex('CronBatchRun_provider_batch_id_key').on(table.providerBatchId),
+    index('CronBatchRun_kind_status_idx').on(table.kind, table.status),
+  ],
+);
+
 // B-LLM-COST-LATENCY-REPORT-01 — stored weekly cost & latency digest. One row
 // per run of /api/cron/llm-cost-report, holding the plain-English markdown the
 // owner reads. The digest is assembled from LlmUsageEvent rows at write time;
