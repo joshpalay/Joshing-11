@@ -55,6 +55,19 @@ Cassian source review is not a production stage. Its closest production analog, 
 
 Worst case reserved before dispatch was $0.388726 under a $0.50 run cap and the $1.50 task authorization. The older uncertain $0.02 call was left untouched. Token counts were free preflights. Agent interaction time was unmetered, about 1.5 hours of wall clock. Human labor for this task was zero. Owner adjudication of the remaining source-review design is unmeasured, not free.
 
+## Answers to the eight task questions
+
+1. **Did the reference work?** No. 8/8 valid replies, 3/3 sound cards kept, answer-type, full-name and attribution defects caught. Formation was an unsafe pass and chronology was held for the wrong reason, so paid work stopped.
+2. **Did compact cost less?** Not measured. The compact candidate is frozen but was never run. v4-format output is 52.5% of review cost, so the most a shorter format could save is smaller than the 82% v3 share suggested.
+3. **Compact misses, false rejections, omissions?** None measured, for the same reason. The reference had 1 unsafe pass, 1 right-verdict-wrong-reason, 0 false rejections and 0 truncations.
+4. **Thinking versus visible output?** Provider-reported thinking tokens were 0 on all 8 calls, and each reply was one `text` block. Historical v3 receipts lack the field, so their split stays formally unknown.
+5. **How much work can use batch?** `batch-verify` is already batched (383/408 calls). `vet-question` (cron sweep) and `backfill-supply-generate` are eligible now, about 8% of 30-day spend, saving about $1/month. About $17 of daily-build spend would need a day-ahead build redesign. Player-triggered work is not eligible.
+6. **Spend and budget:** $0.176856 of the $1.50 authorization. Ledger after: 6.738460 spent, 0.02 reserved, 3.241540 available. The old $0.02 was untouched.
+7. **What remains:** a reference that handles formation and chronology (see below), then the frozen unseen comparison.
+8. **Recommendation:** adopt nothing, pause compact. The cheapest safe win is moving the two latency-insensitive crons to batch pricing (follow-up PR).
+
+A follow-up read-only check (October 16) found that the `vet-question` cron's roughly 22 calls a day mostly re-vet the same ~14 live questions the vetter already called `unverifiable`. Haiku at temperature 0 gives the same answer each time. Batching halves that cost. Not re-asking settled "unverifiable" questions would remove most of it, but that is a behavior change for the owner to decide.
+
 ## What remains before any paid comparison
 
 1. A source reviewer that resolves formation newness and refuses chronology inferred from sentence order, without rejecting sound cards. Four prompt-level attempts have not achieved this. The likely remaining options are a code-checked relation step (the [verification-fix](VERIFICATION-FIX.md) shadow verifier catches both cases, but only with manually authored bindings) or human review of those relation types. Each option needs its own costing.
