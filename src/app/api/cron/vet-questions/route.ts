@@ -5,6 +5,7 @@ import { db, questions } from '@/server/db';
 import { runWithConcurrency } from '@/server/lib/concurrency';
 import { verdictToPublicStatus, vetQuestion } from '@/server/llm/vet-question';
 import { verdictToBlockedVisibility } from '@/server/llm/vet-verdict';
+import { isVetBatchEnabled, runVetBatchSweep } from '@/server/llm/vet-batch';
 import { isCronAuthorized } from '@/server/auth/cron';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,13 @@ const VET_CONCURRENCY = 4;
 export async function GET(request: NextRequest) {
   if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // Batch-API mode (50% token cost): harvest yesterday's/this morning's batch,
+  // then submit today's. See src/server/llm/vet-batch.ts for the latency trade.
+  if (isVetBatchEnabled()) {
+    const report = await runVetBatchSweep(new Date());
+    return NextResponse.json(report, { status: report.error ? 503 : 200 });
   }
 
   const pending = await db

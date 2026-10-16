@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { runSupplyBackfill } from '@/server/daily/supply-backfill';
 import { isCronAuthorized } from '@/server/auth/cron';
+import { isFlagOn } from '@/server/llm/cron-batch';
 
 export const dynamic = 'force-dynamic';
 // A run generates for a few domains (each a Sonnet batch + Haiku/Sonnet gates,
@@ -59,6 +60,8 @@ export async function GET(request: NextRequest) {
     limit: MAX_DOMAINS_PER_RUN,
     systemUserId,
     budgetUsd: DAILY_BUDGET_USD,
+    // 50% token cost; see BackfillOptions.batch. The 12:30 cron is the harvest pass.
+    batch: isFlagOn('SUPPLY_BACKFILL_BATCH_ENABLED'),
   });
 
   console.info('[cron/backfill-supply] run complete', {
@@ -76,6 +79,7 @@ export async function GET(request: NextRequest) {
     selectedCostUsd: report.selectedCostUsd,
     deferredForBudget: report.deferredForBudget,
     built: report.built,
+    batch: report.batch ?? null,
   });
 
   return NextResponse.json(report);

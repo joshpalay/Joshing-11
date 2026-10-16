@@ -42,6 +42,7 @@ import { domainKey } from '@/lib/knowledge/domain-key';
 import { normalizeFactKey } from '@/server/questions/fact-key';
 import { estimateCostUsd } from '@/server/llm/pricing';
 import { embedAndResolveDuplicatesBatch } from '@/server/pool/dedup';
+import { harvestCronBatches, mayCronBatchSubmit, submitCronBatch, type CronHarvestSummary } from '@/server/llm/cron-batch';
 
 export interface BackfillOptions {
   /** true → compute + return the plan, make ZERO generation calls, persist nothing. */
@@ -77,6 +78,16 @@ export interface BackfillOptions {
    * no progress while reporting itself healthy.
    */
   budgetUsd?: number | null;
+  /**
+   * Send generation through the Message Batches API (50% token cost) instead of
+   * a live call: this pass harvests any ended batch (gates, persist, embed and
+   * yield observation run then), and submits tonight's selection only when no
+   * batch is in flight and none went out in the last 20h. The cron sets this
+   * from SUPPLY_BACKFILL_BATCH_ENABLED; the CLI stays synchronous.
+   */
+  batch?: boolean;
+  /** Batch mode: false = harvest only (the later backfill-supply/harvest pass). Default true. */
+  batchSubmit?: boolean;
 }
 
 const DEFAULTS = {
@@ -127,6 +138,12 @@ export type BackfillReport = {
   selectedCostUsd: number;
   /** Actionable domains deferred to a later night by the budget (not by `limit`). */
   deferredForBudget: number;
+  /** Batch mode only: what this pass harvested and submitted. */
+  batch?: {
+    harvest: CronHarvestSummary;
+    submitted: { providerBatchId: string; requestCount: number } | null;
+    submitSkippedReason: string | null;
+  };
 };
 
 type DomainRow = {
@@ -309,14 +326,14 @@ export function buildPlan(
   return plans.sort((a, b) => b.batch - a.batch || b.interested - a.interested);
 }
 
-async function generate(
+function buildGenerateParams(
   label: string,
   count: number,
   avoidTexts: { domain: string; text: string }[],
   avoidFks: { domain: string; factKey: string }[],
   subAngles: string[],
   references?: Map<string, DomainReference>,
-): Promise<LlmQuestion[]> {
+) {
   const subAnglesByDomain = subAngles.length > 0 ? new Map([[label, subAngles]]) : undefined;
   const userPrompt = buildUserPrompt(
     [label], count,
@@ -326,16 +343,13 @@ async function generate(
     undefined, undefined, undefined, undefined,
     references,
   );
-  const client = getAnthropicClient();
-  if (!client) throw new Error('no anthropic client');
-  const res = await loggedMessagesCreate(client, 'backfill-supply-generate', {
+  return {
     model: ANTHROPIC_MODEL,
     max_tokens: GEN_MAX_TOKENS,
     temperature: 0.8,
-    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: userPrompt }],
-  }, { timeoutMs: GEN_TIMEOUT_MS });
-  return parseQuestions(extractTextContent(res.content));
+    system: [{ type: 'text' as const, text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' as const } }],
+    messages: [{ role: 'user' as const, content: userPrompt }],
+  };
 }
 
 const SUB_ANGLE_AVOID_LIMIT = 30;
@@ -382,10 +396,10 @@ async function loadAvoid(domainKeyVal: string): Promise<{
   return { texts: rows.map((r) => ({ domain: domainKeyVal, text: r.question_text })), fks, factKeys, subAngles };
 }
 
-async function buildDomain(
-  p: BackfillPlan,
-  systemUserId: string | null,
-): Promise<{ generated: number; persisted: number; survivors: number; persistedKeys: string[] }> {
+type DomainBuildResult = { generated: number; persisted: number; survivors: number; persistedKeys: string[] };
+
+/** Everything before the generation call: avoid lists, grounding, the request. */
+async function prepareDomain(p: BackfillPlan) {
   const avoid = await loadAvoid(p.domainKey);
   let refs: Map<string, DomainReference> | undefined;
   if (p.ground) {
@@ -399,7 +413,24 @@ async function buildDomain(
     refs = await getReferencePassagesForDomains([p.label], hintByDomain).catch(() => undefined);
   }
 
-  const generated = await generate(p.label, p.batch, avoid.texts, avoid.fks, avoid.subAngles, refs);
+  return { avoid, params: buildGenerateParams(p.label, p.batch, avoid.texts, avoid.fks, avoid.subAngles, refs) };
+}
+
+async function buildDomain(p: BackfillPlan, systemUserId: string | null): Promise<DomainBuildResult> {
+  const { avoid, params } = await prepareDomain(p);
+  const client = getAnthropicClient();
+  if (!client) throw new Error('no anthropic client');
+  const res = await loggedMessagesCreate(client, 'backfill-supply-generate', params, { timeoutMs: GEN_TIMEOUT_MS });
+  return finishDomain(p, parseQuestions(extractTextContent(res.content)), avoid.factKeys, systemUserId);
+}
+
+/** Everything after the generation call: gates, novelty, persist, embed. */
+async function finishDomain(
+  p: BackfillPlan,
+  generated: LlmQuestion[],
+  avoidFactKeys: Set<string>,
+  systemUserId: string | null,
+): Promise<DomainBuildResult> {
   if (generated.length === 0) return { generated: 0, persisted: 0, survivors: 0, persistedKeys: [] };
 
   const [ql, fa] = await Promise.all([findQualityFailures(generated), findFactualFailures(generated)]);
@@ -411,7 +442,7 @@ async function buildDomain(
   // (pickBankPicksForDomains), so a miss here persists until someone notices it
   // live in a queue.
   const al = findAnswerLeaks(generated);
-  const seen = new Set(avoid.factKeys);
+  const seen = new Set(avoidFactKeys);
   const survivors: LlmQuestion[] = [];
   generated.forEach((q, i) => {
     if (ql.toDrop.has(i) || fa.toDrop.has(i) || al.toDrop.has(i)) return;
@@ -485,6 +516,42 @@ async function buildDomain(
   return { generated: generated.length, persisted, survivors: survivors.length, persistedKeys };
 }
 
+async function observeYield(p: BackfillPlan, r: DomainBuildResult, systemUserId: string | null): Promise<void> {
+  // Feed the supply-state machine from THIS path too. The dry-round counter
+  // was written only by the per-user JIT round, so a domain the backfill
+  // restocked every night still read "dry" forever (the 2026-07-13 email:
+  // 10 alarmed domains, 5 of them refilled that same morning). Only the
+  // production persisting run observes — a generate-only run adds no stock.
+  if (systemUserId) {
+    try {
+      if (r.persisted > 0) {
+        // Credit the probed key AND the keys the rows actually landed on —
+        // resolveFinestNode can retag a survivor to a finer node, and that
+        // finer domain's counter deserves the reset too.
+        await recordSupplyYieldObservation({
+          yieldedDomainKeys: [p.domainKey, ...r.persistedKeys],
+          dryDomainKeys: [],
+        });
+      } else if (r.generated > 0) {
+        // A dedicated probe (domain alone, full avoid list, grounded when
+        // possible) produced zero survivors — the strongest dry evidence.
+        await recordSupplyYieldObservation({ yieldedDomainKeys: [], dryDomainKeys: [p.domainKey] });
+        // Downward co-calibration: accept realized as ≈ the realizable size
+        // so the domain rests as soft_finite instead of alarming forever.
+        // Fandom-hosted and admin-overridden rows are excluded inside.
+        await coCalibrateLoweredEstimates([p.domainKey], nearCompleteRatio());
+      }
+      // r.generated === 0 → the model/parse returned nothing at all; that is
+      // an outage signal, not evidence about the domain — record nothing.
+    } catch (err) {
+      console.warn('[supply-backfill] yield observation failed (non-fatal)', {
+        domain: p.label,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
 export async function runSupplyBackfill(opts: BackfillOptions): Promise<BackfillReport> {
   const cfg = {
     daysRunway: opts.daysRunway ?? DEFAULTS.daysRunway,
@@ -521,44 +588,64 @@ export async function runSupplyBackfill(opts: BackfillOptions): Promise<Backfill
     deferredForBudget: Math.min(actionable.length, opts.limit) - selected.length,
   };
   if (opts.dryRun) return report;
+  if (opts.batch) return runBatchPass(selected, report, opts.systemUserId ?? null, opts.batchSubmit ?? true);
 
   for (const p of selected) {
     const r = await buildDomain(p, opts.systemUserId ?? null);
     report.built.push({ label: p.label, generated: r.generated, persisted: r.persisted });
 
-    // Feed the supply-state machine from THIS path too. The dry-round counter
-    // was written only by the per-user JIT round, so a domain the backfill
-    // restocked every night still read "dry" forever (the 2026-07-13 email:
-    // 10 alarmed domains, 5 of them refilled that same morning). Only the
-    // production persisting run observes — a generate-only run adds no stock.
-    if (opts.systemUserId) {
-      try {
-        if (r.persisted > 0) {
-          // Credit the probed key AND the keys the rows actually landed on —
-          // resolveFinestNode can retag a survivor to a finer node, and that
-          // finer domain's counter deserves the reset too.
-          await recordSupplyYieldObservation({
-            yieldedDomainKeys: [p.domainKey, ...r.persistedKeys],
-            dryDomainKeys: [],
-          });
-        } else if (r.generated > 0) {
-          // A dedicated probe (domain alone, full avoid list, grounded when
-          // possible) produced zero survivors — the strongest dry evidence.
-          await recordSupplyYieldObservation({ yieldedDomainKeys: [], dryDomainKeys: [p.domainKey] });
-          // Downward co-calibration: accept realized as ≈ the realizable size
-          // so the domain rests as soft_finite instead of alarming forever.
-          // Fandom-hosted and admin-overridden rows are excluded inside.
-          await coCalibrateLoweredEstimates([p.domainKey], nearCompleteRatio());
-        }
-        // r.generated === 0 → the model/parse returned nothing at all; that is
-        // an outage signal, not evidence about the domain — record nothing.
-      } catch (err) {
-        console.warn('[supply-backfill] yield observation failed (non-fatal)', {
-          domain: p.label,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+    await observeYield(p, r, opts.systemUserId ?? null);
   }
+  return report;
+}
+
+const BATCH_ID_PREFIX = 'b_';
+
+async function runBatchPass(
+  selected: BackfillPlan[],
+  report: BackfillReport,
+  systemUserId: string | null,
+  submit: boolean,
+): Promise<BackfillReport> {
+  const client = getAnthropicClient();
+  if (!client) throw new Error('no anthropic client');
+  const now = new Date();
+
+  // Phase 1 — harvest. The plan travels in the run payload (custom_id is capped
+  // at 64 chars). The avoid set is reloaded so novelty is checked against the
+  // bank as it is NOW, which also makes a re-delivered result after a crash
+  // drop rows already persisted under the same fact_key. A failed/expired
+  // result is treated like an empty generation: nothing persisted, no yield
+  // observation (outage, not evidence about the domain).
+  const harvest = await harvestCronBatches(client, 'backfill', 'backfill-supply-generate', now, async (customId, message, run) => {
+    const plans = (run.payload as { plans?: Record<string, BackfillPlan> }).plans ?? {};
+    const p = plans[customId];
+    if (!message || !p) return;
+    const avoid = await loadAvoid(p.domainKey);
+    const r = await finishDomain(p, parseQuestions(extractTextContent(message.content)), avoid.factKeys, systemUserId);
+    report.built.push({ label: p.label, generated: r.generated, persisted: r.persisted });
+    await observeYield(p, r, systemUserId);
+  });
+
+  // Phase 2 — submit tonight's selection.
+  let submitted: { providerBatchId: string; requestCount: number } | null = null;
+  let submitSkippedReason: string | null = null;
+  if (!submit) {
+    submitSkippedReason = 'harvest-only pass';
+  } else if (!(await mayCronBatchSubmit('backfill', harvest, now))) {
+    submitSkippedReason = harvest.runsStillProcessing > 0 ? 'batch still in flight' : 'already submitted today';
+  } else if (selected.length === 0) {
+    submitSkippedReason = 'nothing selected';
+  } else {
+    const requests: { custom_id: string; params: Awaited<ReturnType<typeof prepareDomain>>['params'] }[] = [];
+    const plans: Record<string, BackfillPlan> = {};
+    for (const [i, p] of selected.entries()) {
+      const custom_id = `${BATCH_ID_PREFIX}${i}`;
+      requests.push({ custom_id, params: (await prepareDomain(p)).params });
+      plans[custom_id] = p;
+    }
+    submitted = await submitCronBatch(client, 'backfill', requests, { plans });
+  }
+  report.batch = { harvest, submitted, submitSkippedReason };
   return report;
 }
