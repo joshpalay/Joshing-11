@@ -40,6 +40,8 @@ export async function getSharedAnswerActivity(userId: string, windowDays: number
       questionText: questions.questionText,
       correctAnswer: questions.answerText,
       domain: questions.canonicalSubcategory,
+      shortLabel: questions.shortLabel,
+      subjectEntity: questions.subjectEntity,
       answeredAt: masteryEvents.createdAt,
       answerId: masteryEvents.answerId,
       trustTier: questions.trustTier,

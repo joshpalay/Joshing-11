@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveSharedAnswerActivity, type SharedAnswerEvidence, type SharedFeedEvidence } from '@/lib/shared-answer-activity'
+import { deriveSharedAnswerActivity, sharedAnswerTopic, type SharedAnswerEvidence, type SharedFeedEvidence } from '@/lib/shared-answer-activity'
 
 const since = new Date('2026-10-09T00:00:00Z')
 const friends = [{ userId: 'chiann', name: 'Chiann' }]
@@ -63,5 +63,21 @@ describe('Recent Activity: newly discovered shared answers', () => {
     expect(items).toHaveLength(1)
     expect(items[0].friends.map((f) => f.userId)).toEqual(['chiann', 'david'])
     expect(derive([answer('me')])).toEqual([])
+  })
+})
+
+describe('shared-answer headline topics', () => {
+  it('uses the specific label first, then subject knowledge, then the actual domain', () => {
+    expect(sharedAnswerTopic({ shortLabel: 'Bach concertos', subjectEntity: 'J. S. Bach', domain: 'Music' })).toBe('Bach concertos')
+    expect(sharedAnswerTopic({ subjectEntity: 'kangaroo', domain: 'General Animal Knowledge' })).toBe('kangaroo knowledge')
+    expect(sharedAnswerTopic({ subjectEntity: 'kangaroo knowledge' })).toBe('kangaroo knowledge')
+    expect(sharedAnswerTopic({ shortLabel: '  ', subjectEntity: ' ', domain: 'Star Wars' })).toBe('Star Wars')
+    expect(sharedAnswerTopic({})).toBeNull()
+  })
+  it('carries the label through the real shared-answer transform without changing the send domain', () => {
+    const items = deriveSharedAnswerActivity('me', friends, [
+      { ...answer('me'), shortLabel: 'Bach concertos', domain: 'Baroque Music' }, answer('chiann'),
+    ], [], since)
+    expect(items[0]).toMatchObject({ topic: 'Bach concertos', domain: 'Baroque Music' })
   })
 })
