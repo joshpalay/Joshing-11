@@ -1,5 +1,7 @@
 # Cassian next source-review comparison
 
+**October 15 outcome:** The authorized [bounded cost screen](COMPACT-COST-RESULTS.md) completed its one reference compatibility check and stopped on semantic failure. The compact path made no calls; actual savings are unknown. Adopt nothing. The proposal below remains historical; no further paid tuning or production change follows from it.
+
 Design proposal, October 14, 2026. The [saved-output reconciliation](RECONCILIATION.md) is complete as an informed development assessment. This document makes the next decision concrete; it is not a frozen dispatch plan or authorization for a new production path. No paid comparison is ready yet.
 
 ## Question to answer
