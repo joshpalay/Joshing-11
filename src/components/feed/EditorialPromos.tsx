@@ -151,7 +151,7 @@ export function CommonGroundFeature({
                           friendTier={d.friend.tier}
                           datasetMax={datasetMax}
                           scale={SHARED_GROUND_CIRCLE_SCALE}
-                          ariaLabel={`${d.label}: shared with ${f.friendFirstName}, still untested`}
+                          ariaLabel={`${d.label}: shared with ${f.friendFirstName}, not yet proven by both of you`}
                         />
                       </span>
                       <span className="max-w-[150px] font-serif text-quiet leading-snug text-[var(--brand-ink-400)]">

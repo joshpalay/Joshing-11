@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Clock, EyeOff, Moon, X } from 'lucide-react'
 
+import { useCloseOnBack } from '@/lib/use-close-on-back'
+
 // The single "Not for me" control's sheet.
 //
 // It replaces two adjacent, identically-styled links that did drastically
@@ -46,6 +48,9 @@ export function NotForMeSheet({
   onClose: () => void
 }) {
   const [busy, setBusy] = useState<NotForMeScope | null>(null)
+
+  // Phone Back closes the sheet rather than leaving the round (QA 2026-10-17 S3).
+  useCloseOnBack(onClose)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

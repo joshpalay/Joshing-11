@@ -40,7 +40,7 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
   } else if (proven.length > 1) {
     headline = `You and ${friendFirstName} share several areas.`
   } else if (latent.length > 0) {
-    headline = `Shared ground with ${friendFirstName}, still untested.`
+    headline = `Shared ground with ${friendFirstName}, not yet proven by both of you.`
   } else {
     headline = `No overlap with ${friendFirstName} yet.`
   }
@@ -74,7 +74,7 @@ export function CommonGround({ data, friendFirstName, limit }: CommonGroundProps
 
           {latentShown.length > 0 ? (
             <DomainGroup
-              caption="Shared, still untested"
+              caption="Shared, not yet proven by both"
               domains={latentShown}
               datasetMax={datasetMax}
               ghosted
@@ -151,13 +151,38 @@ function DomainGroup({
           className="mt-3 font-serif text-sm italic"
           style={{ color: 'var(--brand-ink-700)' }}
         >
-          {domains.length === 1
-            ? `You both claim ${domains[0].canonical_subcategory} — neither's been tested yet.`
-            : `Domains you both claim but neither of you has been tested on yet.`}
+          {latentFootnote(domains, friendFirstName)}
         </p>
       ) : null}
     </div>
   )
+}
+
+// A latent domain is shared but not proven by BOTH people — one of them may well
+// have proven it (QA 2026-10-17 S1: a friend with 8 correct Tudor Dynasty answers
+// was listed as "neither of you has been tested"). Only say "neither" when that
+// is true; otherwise name who still has to be tested.
+export function latentFootnote(domains: CommonGroundDomain[], friendFirstName: string): string {
+  const untestedBy = (d: CommonGroundDomain) =>
+    !d.viewer.proven && !d.friend.proven ? 'neither' : !d.viewer.proven ? 'viewer' : 'friend'
+  const who = new Set(domains.map(untestedBy))
+  if (domains.length === 1) {
+    const name = domains[0].canonical_subcategory
+    const only = [...who][0]
+    if (only === 'neither') return `You both claim ${name} — neither's been tested yet.`
+    if (only === 'viewer') return `You both claim ${name} — you haven't been tested on it yet.`
+    return `You both claim ${name} — ${friendFirstName} hasn't been tested on it yet.`
+  }
+  if (who.size === 1 && who.has('neither')) {
+    return 'Domains you both claim but neither of you has been tested on yet.'
+  }
+  if (who.size === 1 && who.has('viewer')) {
+    return `Domains you both claim that ${friendFirstName} has proven and you haven't been tested on yet.`
+  }
+  if (who.size === 1 && who.has('friend')) {
+    return `Domains you both claim that you've proven and ${friendFirstName} hasn't been tested on yet.`
+  }
+  return "Domains you both claim that at least one of you hasn't been tested on yet."
 }
 
 function DomainCircles({
@@ -172,7 +197,7 @@ function DomainCircles({
   const label =
     domain.kind === 'proven'
       ? `You and ${friendFirstName} both know ${domain.canonical_subcategory}`
-      : `${domain.canonical_subcategory}: shared but not yet proven`
+      : `${domain.canonical_subcategory}: shared but not yet proven by both of you`
 
   return (
     <div className="flex max-w-[160px] min-w-[110px] flex-col items-center gap-1.5 px-1">

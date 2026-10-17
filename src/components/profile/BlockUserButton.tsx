@@ -11,9 +11,11 @@ type Props = {
 // Secondary, overflow-style control -- deliberately not styled like the
 // primary friend-request button above it. Confirms before landing (Read
 // First / spec: "A block is a hard boundary" -- it removes any existing
-// connection) and never distinguishes success from any other outcome in its
-// copy; the target's profile simply becomes unreachable afterward (see
-// getFriendPortraitData's isBlocked short-circuit).
+// connection); the target's profile simply becomes unreachable afterward (see
+// getFriendPortraitData's isBlocked short-circuit). The BLOCKED person is never
+// told -- to them a block is indistinguishable from "doesn't exist". The person
+// blocking, though, gets a plain confirmation on Friends (?blocked=1 ->
+// BlockedNotice): a silent finish left them unsure it had worked (QA 2026-10-17).
 export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
   const router = useRouter()
   const [confirming, setConfirming] = useState(false)
@@ -34,7 +36,7 @@ export function BlockUserButton({ targetUserId, targetDisplayName }: Props) {
         setError(body?.message ?? 'Could not block this person.')
         return
       }
-      router.push('/friends')
+      router.push('/friends?blocked=1')
       router.refresh()
     } catch {
       setError('Network error. Please try again.')
