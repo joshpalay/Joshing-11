@@ -22,10 +22,16 @@ import { hasEligibleReturnCandidates } from '@/server/db/queries/missed-return'
 import { isMissedReturnEnabled } from '@/server/daily/missed-return'
 import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
 import { shouldShowWelcomeTour } from '@/server/welcome-tour'
+import { RecentActivityComparison } from '@/components/home/RecentActivityComparison'
+import { getSharedAnswerActivity } from '@/server/db/queries/shared-answer-activity'
+import { HOME_WINDOW_DAYS } from '@/server/home/select-edition'
 
 const FEED_PAGE_SIZE = 20
 
-export default async function Home() {
+export default async function Home({ searchParams }: {
+  searchParams: Promise<{ recentActivity?: string | string[] }>
+}) {
+  const sharedActivity = (await searchParams).recentActivity === 'shared'
   const session = await getSession()
   // First-player orientation is earned by completing the first Daily Five.
   // Eligibility and seen-state are durable and account-scoped, so the tour
@@ -64,6 +70,8 @@ export default async function Home() {
           backgroundRepeat: 'no-repeat',
         }}
       />
+
+      {session && !tourActive ? <RecentActivityComparison shared={sharedActivity} /> : null}
 
       {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (
@@ -149,7 +157,7 @@ export default async function Home() {
         <section id="feed" data-tour="foryou">
           {session ? (
             <Suspense fallback={null}>
-              <FromYourFriendsSection userId={session.userId} />
+              <FromYourFriendsSection userId={session.userId} sharedActivity={sharedActivity} />
             </Suspense>
           ) : (
             <FeedList pageSize={FEED_PAGE_SIZE} infinite />
@@ -263,16 +271,17 @@ async function MutualFriendSuggestionsHomeSection({ userId }: { userId: string }
   return <MutualFriendSuggestionsTeaser count={suggestions.length} />
 }
 
-async function FromYourFriendsSection({ userId }: { userId: string }) {
+async function FromYourFriendsSection({ userId, sharedActivity }: { userId: string; sharedActivity: boolean }) {
   // D-HOME-PACING-01: the unified "What's Happening" home feed is now a fixed-
   // budget EDITION, not a render of everything. The server-side selection layer
   // computes the served slice of each zone (Direct 3, Playables 4, Texture ~5),
   // the overflow counts the question zones window against, the one rotating
   // panel, and the all-empty switch. FeedList renders this pre-budgeted edition
   // (no client-side selection, no infinite scroll, no temporal buckets).
-  const { edition, feedMeta } = await timeServerWork('home/from-friends', 'home_edition', () =>
-    buildHomeEdition(userId),
-  )
+  const [{ edition, feedMeta }, sharedAnswers] = await Promise.all([
+    timeServerWork('home/from-friends', 'home_edition', () => buildHomeEdition(userId)),
+    sharedActivity ? getSharedAnswerActivity(userId, HOME_WINDOW_DAYS) : Promise.resolve(null),
+  ])
 
   // Seed FeedList with the served direct slice and the same meta the empty-state
   // copy / surface tabs read. has_more is false: the budget is the page; the
@@ -304,6 +313,7 @@ async function FromYourFriendsSection({ userId }: { userId: string }) {
         initialPage={initialPage}
         showContributeFooter
         unifiedHome
+        sharedAnswers={sharedAnswers}
         activityItems={[...edition.playables.served, ...edition.texture]}
         budget={{
           directOverflowCount: edition.direct.overflowCount,

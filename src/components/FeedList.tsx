@@ -33,6 +33,8 @@ import {
   NEEDS_HUMAN_RECHECK_FALLBACK_MESSAGE,
 } from '@/lib/recheck-copy'
 import { ActivityStreamItem } from '@/components/activity/ActivityStreamItem'
+import { SharedAnswerActivity } from '@/components/home/SharedAnswerActivity'
+import type { SharedAnswerActivity as SharedAnswer } from '@/lib/shared-answer-activity'
 import { PersonActivityCard } from '@/components/activity/PersonActivityCard'
 import { groupActivityByFriend, type GroupInputRow, type GroupedRow } from '@/components/feed/person-grouping'
 import { EditorialFeature } from '@/components/feed/EditorialFeature'
@@ -553,6 +555,8 @@ type FeedListProps = {
    * row is de-duped against its richer direct_sent feed card (see unifiedRows).
    */
   activityItems?: StreamItem[]
+  /** Opt-in Recent Activity comparison. Null preserves the current stream. */
+  sharedAnswers?: SharedAnswer[] | null
   /**
    * Home-only "Overlap" common-ground promo (the overlapping-circle
    * editorial feature). A first-class module: rendered whenever there's latent
@@ -967,6 +971,7 @@ function FeedListContent({
   showContributeFooter = false,
   unifiedHome = false,
   activityItems = [],
+  sharedAnswers = null,
   commonGroundPromo = null,
   expandingPromo = null,
   addFriendsPromo = null,
@@ -2245,7 +2250,7 @@ function FeedListContent({
         </div>
       ) : null}
 
-      {unifiedRows.length === 0 ? (
+      {unifiedRows.length === 0 && sharedAnswers === null ? (
         loadingInitial ? (
           <section className="flex min-h-48 flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground text-sm">{emptyCopy}</p>
@@ -2387,7 +2392,15 @@ function FeedListContent({
                   after the lead rows (§2 slot 5); the "See more activity →" row
                   closes the zone. Hidden outright when nothing in-window
                   (no per-section empty state, 2026-06-15). */}
-              {restRows.length > 0 ? (
+              {sharedAnswers !== null ? (
+                <Fragment key="shared-answers">
+                  <FeedSectionHeading unifiedHome={unifiedHome} prominent windowLabel={fromFriendsRows.length === 0 ? 'Past 7 days' : undefined}>
+                    Recent activity
+                  </FeedSectionHeading>
+                  <SharedAnswerActivity items={sharedAnswers} />
+                  {budget.panel ? renderRow(panelRow(budget.panel)) : null}
+                </Fragment>
+              ) : restRows.length > 0 ? (
                 <Fragment key="texture">
                   <FeedSectionHeading
                     unifiedHome={unifiedHome}
@@ -2414,7 +2427,7 @@ function FeedListContent({
                   single rotating panel still renders once, here, instead of
                   mid-zone (suppressed on the all-empty page, where the server
                   sends panel: null). */}
-              {budget.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
+              {sharedAnswers === null && budget.panel && restRows.length === 0 ? renderRow(panelRow(budget.panel)) : null}
             </Fragment>
           ) : pendingQueue ? (
             // Overflow subpage — the full pending queue flat, in the server's
