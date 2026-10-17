@@ -149,6 +149,9 @@ describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
     }
     const html = render({ ...base, activityItems: [playable('p0', 'chiann'), texture('t0')], sharedAnswers })
     expect(html).toContain('activity:p0:chiann')
+    expect(html).toContain('Things in common')
+    expect(html).toContain('Questions you and your friends both knew.')
+    expect(html).not.toContain('Recent activity')
     expect(html).toContain('Who composed these concertos?')
     expect(html).toContain('Bach')
     expect(html).not.toContain('activity:t0:')

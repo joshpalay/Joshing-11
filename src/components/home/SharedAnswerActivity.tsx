@@ -11,13 +11,32 @@ const FRIEND_COLORS = [
   'var(--brand-ink-700)',
 ] as const
 
-function friendColor(userId: string) {
+function stableHash(value: string) {
   let hash = 2166136261
-  for (let index = 0; index < userId.length; index++) {
-    hash ^= userId.charCodeAt(index)
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
-  return FRIEND_COLORS[(hash >>> 0) % FRIEND_COLORS.length]
+  return hash >>> 0
+}
+
+function friendColor(userId: string) {
+  return FRIEND_COLORS[stableHash(userId) % FRIEND_COLORS.length]
+}
+
+const PRAISE = ['nailed', 'aced', 'knew their stuff on', 'rocked'] as const
+
+function activityHeadlines(items: SharedAnswer[]) {
+  // Stable across renders, with no identical praise on neighboring entries.
+  const headlines: string[] = []
+  let previousPraise = -1
+  for (const item of items) {
+    let praise = stableHash(item.questionId) % PRAISE.length
+    if (praise === previousPraise) praise = (praise + 1) % PRAISE.length
+    previousPraise = praise
+    headlines.push(`${PRAISE[praise]} ${item.topic?.trim() || item.domain?.trim() || 'this one'}.`)
+  }
+  return headlines
 }
 
 export function SharedAnswerActivity({ items }: { items: SharedAnswer[] }) {
@@ -26,12 +45,12 @@ export function SharedAnswerActivity({ items }: { items: SharedAnswer[] }) {
       No new shared answers this week. When a friend gets one you knew, it will appear here.
     </p>
   )
+  const headlines = activityHeadlines(items)
   return (
     <div className="divide-y divide-[var(--brand-border)]" data-recent-activity="shared">
-      {items.map((item) => (
+      {items.map((item, itemIndex) => (
         <article key={item.questionId} className="py-5 text-[var(--brand-ink)]">
           <h3 className="mb-3 text-base font-semibold">
-            {item.friends.every((friend) => friend.fromYourFeed) ? '' : 'You and '}
             {item.friends.map((friend, index) => (
               <span key={friend.userId}>
                 {index ? index === item.friends.length - 1 ? ' and ' : ', ' : ''}
@@ -43,8 +62,7 @@ export function SharedAnswerActivity({ items }: { items: SharedAnswer[] }) {
                 </Link>
               </span>
             ))}
-            {' rocked '}{item.topic?.trim() || item.domain?.trim() || 'this one'}
-            {item.friends.every((friend) => friend.fromYourFeed) ? ' too.' : '.'}
+            {' '}{headlines[itemIndex]}
           </h3>
           <p className="font-serif text-xl leading-relaxed font-medium">{item.questionText}</p>
           <div className="mt-2 flex items-start justify-between gap-3">

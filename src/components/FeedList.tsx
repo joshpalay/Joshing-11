@@ -2394,8 +2394,13 @@ function FeedListContent({
                   (no per-section empty state, 2026-06-15). */}
               {sharedAnswers !== null ? (
                 <Fragment key="shared-answers">
-                  <FeedSectionHeading unifiedHome={unifiedHome} prominent windowLabel={fromFriendsRows.length === 0 ? 'Past 7 days' : undefined}>
-                    Recent activity
+                  <FeedSectionHeading
+                    unifiedHome={unifiedHome}
+                    prominent
+                    windowLabel={fromFriendsRows.length === 0 ? 'Past 7 days' : undefined}
+                    subtitle="Questions you and your friends both knew."
+                  >
+                    Things in common
                   </FeedSectionHeading>
                   <SharedAnswerActivity items={sharedAnswers} />
                   {budget.panel ? renderRow(panelRow(budget.panel)) : null}
