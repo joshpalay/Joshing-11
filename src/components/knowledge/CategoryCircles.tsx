@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { getPortraitDomainColor } from '@/components/knowledge/PortraitCircles';
 import { KnowledgeBubble } from '@/components/knowledge/KnowledgeBubble';
 import { KNOWLEDGE_TIER_LABEL } from '@/server/profile/knowledge-tier-copy';
+import { TIER_THRESHOLD_POINTS } from '@/server/mastery/tiers';
 import type { MasteryTier } from '@/types/db';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,6 +33,10 @@ export type RoundCircleItem = {
    * delta or the forward "next milestone" teaser — see `RoundCircleRow`.
    */
   tier_before?: string;
+  /** Rank among ALL the player's areas by total points (1 = biggest), when known. */
+  area_rank?: number | null;
+  /** First time the player has earned points in this area. */
+  is_new_territory?: boolean;
 };
 
 // Re-export for callers that imported getDomainColor from this module.
@@ -295,16 +300,119 @@ function GameCircleRow({
 }
 
 // ── Round summary row ─────────────────────────────────────────────────────────
+//
+// The round recap shows how BIG each area is, not just what today added: the
+// circle is sized by the area's total points, and a solid outer ring is the
+// slice today added (thin ring on a big circle = "already huge, grew a bit").
+// Under the name, a bar shows how close the area is to its next level, with
+// today's piece drawn solid. (Before this, the circle was sized by this-round
+// points only, so a huge area and a brand-new one with the same +50 looked
+// identical.)
+
+const RING_MIN_R = 15;
+const RING_MAX_R = MAX_SIZE / 2;
+const RING_MIN_BAND = 2;
+
+// Area-true radius: a circle with 4× the points has 4× the ink, so big areas
+// read as big without shrinking the small ones to dots.
+function ringRadius(points: number, maxTotal: number): number {
+  const n = Math.max(0, points) / Math.max(maxTotal, 1);
+  return RING_MIN_R + (RING_MAX_R - RING_MIN_R) * Math.sqrt(Math.min(1, n));
+}
+
+function GrowthRingCircle({
+  color,
+  total,
+  gained,
+  maxTotal,
+  animate,
+}: {
+  color: string;
+  total: number;
+  gained: number;
+  maxTotal: number;
+  animate: boolean;
+}) {
+  const outer = ringRadius(total, maxTotal);
+  // Nothing before today (a brand-new area): the whole circle is today's ring.
+  const inner = total - gained > 0 ? ringRadius(total - gained, maxTotal) : 0;
+  const band = Math.min(Math.max(outer - inner, RING_MIN_BAND), outer * 0.6);
+  return (
+    <div
+      style={{
+        width: MAX_SIZE,
+        height: MAX_SIZE,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <KnowledgeBubble
+        diameter={Math.round(outer * 2)}
+        tint={color}
+        border={`${band.toFixed(1)}px solid ${color}`}
+        style={{
+          transform: animate ? 'scale(1)' : `scale(${SEED})`,
+          transition: 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}
+      />
+    </div>
+  );
+}
+
+type LevelProgress = {
+  /** 0–100: where the area sits within its current level now. */
+  pct: number;
+  /** 0–100: where it sat before this round (0 if it crossed a level today). */
+  beforePct: number;
+  /** The next level's label, or null at Mastery. */
+  next: string | null;
+};
+
+function levelProgress(total: number, gained: number, rawTier: string): LevelProgress {
+  const key = tierKey(rawTier);
+  const idx = key ? TIER_ORDER.indexOf(key) : -1;
+  const nextKey = idx >= 0 ? TIER_ORDER[idx + 1] : undefined;
+  if (!key || !nextKey) return { pct: 100, beforePct: 100, next: null };
+  const floor = TIER_THRESHOLD_POINTS[key];
+  const span = Math.max(TIER_THRESHOLD_POINTS[nextKey] - floor, 1);
+  const toPct = (pts: number) => Math.max(0, Math.min(100, ((pts - floor) / span) * 100));
+  // Points can sit past the next threshold when a level has an extra gate
+  // (Mastery's creator-share rule) — never claim 100% toward a level not reached.
+  const pct = Math.min(99, toPct(total));
+  return {
+    pct,
+    beforePct: Math.min(pct, toPct(total - gained)),
+    next: KNOWLEDGE_TIER_LABEL[nextKey],
+  };
+}
+
+function areaSizeLine(item: RoundCircleItem): string {
+  const pts = `${Math.round(item.points_total).toLocaleString('en-US')} pts`;
+  if (item.is_new_territory) return `New area · ${pts}`;
+  if (item.area_rank && item.area_rank <= 10) return `Your #${item.area_rank} area · ${pts}`;
+  return `${pts} total`;
+}
+
+const rowMetaStyle: CSSProperties = {
+  fontSize: 10,
+  fontFamily: 'var(--font-mono)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  fontVariantNumeric: 'tabular-nums',
+};
 
 function RoundCircleRow({
   item,
   index,
-  maxPoints,
+  maxTotal,
   isLast,
 }: {
   item: RoundCircleItem;
   index: number;
-  maxPoints: number;
+  maxTotal: number;
   isLast: boolean;
 }) {
   const [visible, setVisible] = useState(false);
@@ -313,15 +421,14 @@ function RoundCircleRow({
     return () => clearTimeout(t);
   }, [index]);
 
-  const isMastery = tierKey(item.tier_current) === 'mastery';
   // A REAL this-round crossing, from the same server-computed record the
-  // page's "you moved to X" sentence draws from — not the forward "next
-  // milestone" guess. Only this form ever uses the "X → Y" arrow, so the
-  // arrow never appears unless a crossing actually happened (Priority 6 /
-  // Screen 13: this used to always show "current → next tier" regardless of
-  // whether the player had actually reached the second tier this round).
+  // page's "you moved to X" sentence draws from — not a forward guess. Only
+  // this form ever uses the "X → Y" arrow, so the arrow never appears unless a
+  // crossing actually happened (Priority 6 / Screen 13).
   const tierChanged = Boolean(item.tier_before) && item.tier_before !== item.tier_current;
   const dc = getPortraitDomainColor(item.broad_category);
+  const gained = item.points_gained_this_round;
+  const progress = levelProgress(item.points_total, gained, item.tier_current);
 
   return (
     <div
@@ -336,10 +443,11 @@ function RoundCircleRow({
         transition: 'opacity 0.35s ease, transform 0.35s ease',
       }}
     >
-      <KnowledgeCircle
-        broadCategory={item.broad_category}
-        pointsAfter={item.points_gained_this_round}
-        maxPoints={maxPoints}
+      <GrowthRingCircle
+        color={dc.primary}
+        total={item.points_total}
+        gained={gained}
+        maxTotal={maxTotal}
         animate={visible}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -350,37 +458,61 @@ function RoundCircleRow({
             fontWeight: 600,
             color: 'var(--text)',
             lineHeight: 1.25,
-            marginBottom: 5,
+            marginBottom: 4,
           }}
         >
           {item.canonical_subcategory}
         </div>
+        <div style={{ ...rowMetaStyle, color: 'var(--text)' }}>{areaSizeLine(item)}</div>
         <div
+          aria-hidden
           style={{
-            fontSize: 9,
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: tierChanged ? dc.primary : 'var(--text-muted)',
+            position: 'relative',
+            height: 5,
+            borderRadius: 3,
+            marginTop: 8,
+            overflow: 'hidden',
+            background: `color-mix(in srgb, ${dc.primary} 12%, transparent)`,
           }}
         >
-          {isMastery
-            ? KNOWLEDGE_TIER_LABEL.mastery
-            : tierChanged
-              ? `${displayTier(item.tier_before as string)} → ${displayTier(item.tier_current)}`
-              : tierProgression(item.tier_current)}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: `${progress.beforePct}%`,
+              background: `color-mix(in srgb, ${dc.primary} 38%, transparent)`,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: `${progress.beforePct}%`,
+              width: `${Math.max(progress.pct - progress.beforePct, gained > 0 && progress.next ? 1.5 : 0)}%`,
+              background: dc.primary,
+            }}
+          />
         </div>
         <div
           style={{
-            fontSize: 10,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-muted)',
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            marginTop: 4,
+            ...rowMetaStyle,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginTop: 5,
           }}
         >
-          +{item.points_gained_this_round} this round
+          <span style={{ color: tierChanged ? dc.primary : undefined }}>
+            {tierChanged
+              ? `${displayTier(item.tier_before as string)} → ${displayTier(item.tier_current)}`
+              : progress.next
+                ? `${Math.floor(progress.pct)}% to ${progress.next}`
+                : KNOWLEDGE_TIER_LABEL.mastery}
+          </span>
+          <span style={{ color: 'var(--text)', flexShrink: 0 }}>+{gained} today</span>
         </div>
       </div>
     </div>
@@ -444,23 +576,30 @@ export function GameCategoryCircles({ items }: { items: GameCircleItem[] }) {
 export function RoundCategoryCircles({ items }: { items: RoundCircleItem[] }) {
   if (items.length === 0) return null;
 
-  const maxPoints = Math.max(...items.map((i) => i.points_gained_this_round), 1);
+  // Biggest area first, so the recap leads with what the player knows most.
+  const sorted = [...items].sort(
+    (a, b) =>
+      b.points_total - a.points_total ||
+      b.points_gained_this_round - a.points_gained_this_round ||
+      a.canonical_subcategory.localeCompare(b.canonical_subcategory),
+  );
+  const maxTotal = Math.max(...sorted.map((i) => i.points_total), 1);
 
   return (
     <div>
       <p style={sectionHeaderStyle}>See how this shaped your knowledge base</p>
       <div style={cardStyle}>
-        {items.map((item, i) => (
+        {sorted.map((item, i) => (
           <RoundCircleRow
             key={item.canonical_subcategory}
             item={item}
             index={i}
-            maxPoints={maxPoints}
-            isLast={i === items.length - 1}
+            maxTotal={maxTotal}
+            isLast={i === sorted.length - 1}
           />
         ))}
       </div>
-      <p style={legendStyle}>Size = points this round</p>
+      <p style={legendStyle}>Size = all you know · Ring = today</p>
     </div>
   );
 }
