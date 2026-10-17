@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
+import { BlockedNotice } from '@/components/friends/BlockedNotice';
 import { ContactMatchBlock } from '@/components/friends/ContactMatchBlock';
 import { FindFriendsSearch } from '@/components/friends/FindFriendsSearch';
 import { FriendsPageClient } from '@/components/friends/FriendsPageClient';
@@ -225,6 +226,10 @@ export default async function FriendsPage() {
           Invite a friend
         </Link>
       </header>
+
+      <Suspense fallback={null}>
+        <BlockedNotice />
+      </Suspense>
 
       <Suspense fallback={null}>
         <FriendsPageClient

@@ -284,6 +284,10 @@ function KnowledgePageContent({
   const [tidying, setTidying] = useState(false);
   const [tidyNotice, setTidyNotice] = useState<string | null>(null);
   const [questionToast, setQuestionToast] = useState<string | null>(null);
+  // Confirmation after "Remove from your map", with an Undo — removal used to
+  // land silently while adding a topic confirmed with an Undo (QA 2026-10-17).
+  const [removedTopic, setRemovedTopic] = useState<string | null>(null);
+  const [undoingRemove, setUndoingRemove] = useState(false);
   const [askFriendDomain, setAskFriendDomain] = useState<string | null>(null);
 
   // Detail pop-up controller (shared with the peaks view): owns the optimistic
@@ -421,7 +425,38 @@ function KnowledgePageContent({
         : previous,
     );
     void loadKnowledge().catch(() => undefined);
+    setRemovedTopic(canonicalSubcategory);
     return true;
+  };
+
+  useEffect(() => {
+    if (!removedTopic) return;
+    const timer = window.setTimeout(() => setRemovedTopic(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [removedTopic]);
+
+  // Undo is the exact inverse of removeFromMap: removal only writes this one
+  // subcategory exclusion, so deleting it brings the topic back as it was
+  // (points, frequency and all).
+  const undoRemoveFromMap = async () => {
+    if (!removedTopic || undoingRemove) return;
+    setUndoingRemove(true);
+    try {
+      const response = await fetch('/api/users/domain-exclusions', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ canonical_subcategory: removedTopic, scope: 'subcategory' }),
+      });
+      if (!response.ok) throw new Error('undo failed');
+      setRemovedTopic(null);
+      await loadKnowledge();
+    } catch {
+      setRemovedTopic(null);
+      setQuestionToast('Could not undo that. Add the topic again to bring it back.');
+    } finally {
+      setUndoingRemove(false);
+    }
   };
 
   // "Add a topic" suggestions — related but specific, and fresh each visit.
@@ -1303,6 +1338,25 @@ function KnowledgePageContent({
           className="fixed left-1/2 -translate-x-1/2 z-[var(--z-toast)] border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] px-4 py-2.5 shadow-[var(--shadow-overlay)] text-[0.88rem]"
         >
           {questionToast}
+        </div>
+      ) : null}
+      {removedTopic ? (
+        <div
+          role="status"
+          aria-live="polite"
+          // Above the bottom nav (Knowledge) and the Done bar (setup).
+          style={{ bottom: 96 + (tidyNotice ? 44 : 0) + (questionToast ? 44 : 0) }}
+          className="fixed left-1/2 -translate-x-1/2 z-[var(--z-toast)] flex w-[min(360px,calc(100vw-32px))] items-center justify-between gap-3 border border-[var(--border-warm)] bg-[var(--brand-card)] text-[var(--ink)] pl-4 pr-2 shadow-[var(--shadow-overlay)] text-sm"
+        >
+          <span>Removed “{removedTopic}” — your points are kept.</span>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center font-medium text-[var(--brand-link)] underline underline-offset-4"
+            onClick={() => void undoRemoveFromMap()}
+            disabled={undoingRemove}
+          >
+            {undoingRemove ? 'Undoing…' : 'Undo'}
+          </button>
         </div>
       ) : null}
 

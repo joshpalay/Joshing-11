@@ -18,13 +18,15 @@ import {
   type Convergence,
   type ConvergenceCoCorrectRow,
 } from '@/lib/convergence';
+import { getDailyAssignmentBounds } from '@/lib/games/timezone';
 import { resolveAuthorDisplay } from '@/lib/questions-types';
 import {
   FRIEND_FACING_TIERS,
   applyTierGate,
   type TrustTier,
 } from '@/server/daily/verification-gating';
-import { db, feedItems, follows, masteryEvents, milestoneDismissed, questions, users } from '@/server/db';
+import { dailyQueues, db, feedItems, follows, masteryEvents, milestoneDismissed, questions, users } from '@/server/db';
+import { asQueueSlots } from '@/server/daily/catchup';
 import { pgErrorCode } from '@/server/db/pg-error';
 import { getForwardDiscoverable } from '@/server/db/queries/account';
 import { approvedFollowExists, mutualFollowApproved } from '@/server/db/queries/follow-visibility';
@@ -437,6 +439,30 @@ function batchKeyFor(
  * pre-answered questions and freezing card membership both need persistence and
  * are the documented follow-up (see the spec's Open section).
  */
+// Question ids (in both id spaces) still unplayed in the viewer's current Daily
+// Five — neither answered nor skipped. Fails open: a lookup blip hides nothing.
+async function getUnplayedDailyQueueIds(
+  userId: string,
+): Promise<{ questionIds: Set<string>; generatedQuestionIds: Set<string> }> {
+  const ids = { questionIds: new Set<string>(), generatedQuestionIds: new Set<string>() };
+  try {
+    const { assignmentDateStr } = getDailyAssignmentBounds();
+    const [queue] = await db
+      .select({ slots: dailyQueues.slots })
+      .from(dailyQueues)
+      .where(and(eq(dailyQueues.userId, userId), eq(dailyQueues.queueDate, assignmentDateStr)))
+      .limit(1);
+    for (const slot of asQueueSlots(queue?.slots)) {
+      if (slot.answered || slot.skipped) continue;
+      if (slot.question_id) ids.questionIds.add(slot.question_id);
+      if (slot.generated_question_id) ids.generatedQuestionIds.add(slot.generated_question_id);
+    }
+    return ids;
+  } catch {
+    return { questionIds: new Set<string>(), generatedQuestionIds: new Set<string>() };
+  }
+}
+
 export async function getFriendActivity(
   userId: string,
   // Defaulted to the 35-day scan for the /from-friends overflow page and any
@@ -472,6 +498,7 @@ export async function getFriendActivity(
       sourceAnswerId: feedItems.sourceAnswerId,
       joshingGameId: feedItems.joshingGameId,
       creatorId: questions.creatorId,
+      generatedQuestionId: questions.generatedQuestionId,
       answeredAt: feedItems.sourceEventAt,
       viaUserId: feedItems.viaUserId,
       viaName: viaUser.displayName,
@@ -575,9 +602,20 @@ export async function getFriendActivity(
     }
   }
 
+  // A question still waiting in the viewer's own Daily Five isn't offered here
+  // too (QA 2026-10-12 S3 / 2026-10-17 S2): "View Answer" on the From-Friends
+  // copy records a give-up on a question the viewer is about to play. Matched in
+  // both id spaces — authored slots carry the Question id, bot slots the
+  // GeneratedQuestion id (whose Question twin is what the feed row points at).
+  const queued = await getUnplayedDailyQueueIds(userId);
+  const inOwnFive = (row: { questionId: string | null; generatedQuestionId: string | null }) =>
+    (row.questionId !== null && queued.questionIds.has(row.questionId)) ||
+    (row.generatedQuestionId !== null && queued.generatedQuestionIds.has(row.generatedQuestionId));
+
   const playRows: FriendPlayRow[] = [];
   for (const row of rows) {
     if (!row.questionId || !row.answeredAt) continue;
+    if (inOwnFive(row)) continue;
     const context = parsePlayContext(row.sourceAnswerId);
     const friendName = row.friendDisplayName?.trim() || 'A friend';
     playRows.push({
