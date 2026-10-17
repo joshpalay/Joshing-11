@@ -2,7 +2,7 @@
 name: bank-difficulty-loosening
 status: active
 opened: 2026-10-03
-last-reviewed: 2026-10-16
+last-reviewed: 2026-10-17
 owner: Josh
 related-pr: "#1743, #1744"
 ---
@@ -965,3 +965,70 @@ make the keep/raise/off call.
 5. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 10,
    closing ~2026-10-20 — **be ready to make the §6 keep/raise/off call within
    the next review or two.**
+
+### 2026-10-17 (diagnosis-review) — no new loosened pick on the 2026-10-16 cron (still 9 ever); Q3 unchanged; day 11 of the ≥14-day firing clock, 3 days from closing
+
+**Environment note:** no `.env`/`.env.local` present in this session; live,
+read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available and used for every query below.
+
+**The loosening has fired 9 times, all time, still — no new fire since the
+last review.** `SELECT count(*) ... WHERE (a->>'loosened')::boolean = true`
+returns **9**, same as 2026-10-16's reading. Latest recorded build is
+2026-10-16 19:37:50 UTC (28 builds that day, the 2026-10-16 17:05 UTC cron
+included); no 2026-10-17 build yet at review time. The full list of all 9
+fires, re-pulled directly, matches the prior entry's table exactly — same 9
+`build_id`s, same two users (`f5ed1c59…` ×5, `e9aad9d8…` ×4), same single
+upward (accessible→specialist) occurrence from 2026-10-14. Nothing new to
+report in the per-fire detail.
+
+**Q3 — re-ran the real join (30-day window).** Downward loosened picks
+(specialist→accessible): 8 served, 3 answered correct = **37.5%**,
+unchanged from 2026-10-16 (no new downward fire to move it). Upward: still
+n=1, 100%. Normal hits at the same tier pairs, re-pulled: `req=accessible→
+srv=accessible` 26.3% (179 picks), `req=moderate→srv=accessible` 50.0% (24
+picks) — loosened-downward (37.5%) still sits between those two, same read
+as every prior entry: **not** the "answered far more often than normal"
+signal §6/decision-2 watches for.
+
+**Miss-reason mix since deploy (`started_at > '2026-10-03 17:27:20Z'`),
+re-run:** `fact_history` 66 (up from 62), `filtered` 36 (up from 35),
+`no_stock` 26 (up from 23), `tier` **16 (unchanged)**. 144 total post-deploy
+misses now; `tier` share is 11.1%, essentially flat vs. every recent
+reading (11.8%, 12.2%, 12.2%) — still tracking the other three reasons
+proportionally, not disproportionately.
+
+**PR state, re-confirmed via `mcp__github__pull_request_read`:** `#1744`
+still `state: closed`, `merged: true`, `merged_at: 2026-10-03T17:27:20Z` —
+unchanged.
+
+**No code change since the last review** to `generate-questions.ts`,
+`build-context.ts`, or `src/server/db/queries/daily.ts` — `bankLooseTierMaxPerBuild`
+/ `bankLooseTiers` are still present and unchanged in `generate-questions.ts`
+(grep-confirmed). Note on the git-log check itself: `git log -- <path>` for
+all three files returns only one commit, `9b0d2f1` ("diagnosis: daily
+review 2026-10-08") — inspecting that commit shows it's an oversized commit
+carrying hundreds of unrelated files (`.claude/agents/*`, hooks, etc.),
+consistent with a one-time history-squash/rebase artifact around that date
+rather than a real edit to the bank-loosening mechanism that day. Not
+investigated further since it predates this doc's mechanism-change window
+and the file content matches what every prior entry already verified.
+
+**Not resolving anything.** Status stays `active`. The ≥14-day clock for §6
+(counting from the first fire, 2026-10-06) is at **day 11** — 3 days from
+closing (~2026-10-20). Next review (2026-10-18 or 2026-10-19) is likely the
+last "not yet" reading before the clock closes and the keep/raise/off call
+in §6 becomes due.
+
+### Next steps (unchanged)
+1. Watch for a 10th `loosened: true` pick, ideally from a third user —
+   currently 9 ever, still only 2 users.
+2. Keep re-running Q3 as more loosened picks accumulate — n=8 downward
+   reading (37.5% correct) still doesn't trip the "too easy" concern.
+3. Watch whether the upward (accessible→specialist) branch fires again —
+   still just the one 2026-10-14 occurrence.
+4. Watch whether the `tier` miss-reason share (now 16 of 144 post-deploy
+   misses) keeps tracking the other three reasons proportionally.
+5. The ≥14-day-since-first-fire clock (started 2026-10-06) is at day 11,
+   closing ~2026-10-20 — **be ready to make the §6 keep/raise/off call
+   within the next review or two.**

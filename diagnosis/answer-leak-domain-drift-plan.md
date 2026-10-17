@@ -2,7 +2,7 @@
 name: answer-leak-domain-drift-plan
 status: active
 opened: 2026-09-05
-last-reviewed: 2026-10-16
+last-reviewed: 2026-10-17
 owner: Josh
 related-pr: "#1611, #1613, #1618, #1619, #1623, #1624, #1628, #1673, #1701, #1717"
 ---
@@ -3827,3 +3827,83 @@ recommended-but-unrun blind-labeling pass, now at 106 of 775.
 6. **New:** standardize the `GateDropStat` query methodology across review
    sessions (see methodology note above) so the cumulative table stops
    diverging between reviews.
+
+### 2026-10-17 (diagnosis-review) — 40 clean days on `answer_leak_partial`; no second `domain_drift` hit; everything else incremental, no decision-resolving change
+
+**Environment note:** no `.env`/`.env.local` in this container (fresh
+container this session; `npm install` ran clean, 807 packages).
+`DATABASE_URL` and `ANTHROPIC_API_KEY` both absent from `process.env`. Live,
+read-only Supabase MCP connection to the production project
+(`grixooyecvnugpxvcbct`) available and used for all queries below, following
+the standardized methodology Next step 6 above called for: `scope IN
+('daily_build', 'non_player') AND day > '2026-09-07'`, summed across both
+scopes.
+
+**Category-integrity hard-failure checks, reproduced directly against the
+live DB:** zero orphan `KnowledgeEdge` rows (joined on `child_domain_key` /
+`parent_domain_key`, the actual column names — corrected from an earlier
+wrong guess at `from_domain_key`/`to_domain_key` this session, not a schema
+change), zero `KnowledgeNode` rows with more than one label per
+`domain_key`, zero `domain_merged`-sourced `MASTERY_EVENTS` rows in the last
+24h. **Verdict: `ok`.**
+
+**Cumulative `GateDropStat` since the flip (2026-09-07), by gate (summed
+`daily_build` + `non_player`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `answer_leak_partial` | 914 | 0 | 0 |
+| `domain_drift` | 914 | 1 | 0 |
+| `answer_leak_single_word` | 869 | 2 | 0 |
+| `answer_leak_any_token` | 786 | **108** | 0 |
+| `answer_shape` | 914 | 1 | 0 |
+| `quality` | 914 | 372 | 2 |
+
+`answer_leak_partial` now at **40 consecutive clean days**, 914 considered
+(up from 903) — still 0 drops. `domain_drift` still hasn't produced a
+second hit (still 1, same 2026-10-01 row; its Vercel log still hasn't been
+pulled by anyone). `answer_leak_single_word` gained 11 considered (858→869),
+no new drop (still 2). `answer_leak_any_token` gained 2 more drops (106→108,
+775→786 considered) — the recommended blind-labeling pass (open decision 6)
+remains unrun, now **22 days** past its 2026-09-25 recommendation.
+`quality`'s `failed_open` stays flat at 2 under the standardized scoped
+methodology (the two known events: 2026-09-25 `non_player`, 2026-10-02
+`daily_build` — no new occurrence).
+
+**All six `ContentReport` rows from the 2026-09-06 incident re-verified by
+`generated_question_id`, all still `status='open'`**, now **41 days** since
+filing (`139e1932…`, `800c44a3…`, `357618e3…`, `b1804847…`, `3c3f9989…`,
+`815b3ad8…`).
+
+**Bank `still_servable` (is_duplicate=false): 2,924**, up from 2,901 —
+ordinary generation, not investigated further.
+
+**No new code touching this doc's tracked paths.** The only commit on
+`main` since the last review's commit is `#1799` ("Batch-API mode for the
+vet-questions and backfill-supply crons") — confirmed by reading its file
+list directly: touches `src/server/daily/supply-backfill.ts`,
+`src/server/llm/cron-batch.ts`, `src/server/llm/vet-batch.ts`,
+`src/server/llm/vet-question.ts`, the cron routes, `vercel.json`, and a new
+migration (`0155_cron_batch_run.sql`) — none of `self-answering.ts`,
+`off-domain-second-opinion.ts`, `generate-questions.ts`,
+`sweep-bank-quality.ts`, `rewrite-bank-demotions.ts`,
+`quality-gate.eval.test.ts`, or `domain-drift.eval.test.ts`.
+
+**`domain-drift.eval.test.ts` remains unrun** — no `ANTHROPIC_API_KEY` in
+this environment. Stands at 9/11 from its last real run, unchanged.
+
+**No decision-resolving change.** Status stays `active`. Decisions 1–6 are
+all exactly where they were; decision 6 still has an outstanding
+recommended-but-unrun blind-labeling pass, now at 108 of 786.
+
+### Next steps (unchanged)
+1. Keep watching `GateDropStat` for `answer_leak_partial` for an actual
+   drop — now 40+ clean days.
+2. Watch whether `domain_drift` produces a second hit, and whether anyone
+   pulls the Vercel log for the 2026-10-01 hit to confirm true vs. false
+   positive.
+3. A blind-labeling pass on `answer_leak_any_token` remains due (now 108 of
+   786) — recommended since 2026-09-25, still not run.
+4. The six open `ContentReport` rows remain unaddressed, now 41 days old.
+5. The generalized cross-domain audit (other tightly-paired domains) still
+   not started.

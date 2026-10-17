@@ -2,7 +2,7 @@
 name: question-lifecycle-quality-plan
 status: active
 opened: 2026-09-09
-last-reviewed: 2026-10-16
+last-reviewed: 2026-10-17
 owner: Josh
 related-pr: "#1646, #1698, #1702, #1709, #1720"
 ---
@@ -2648,5 +2648,86 @@ each commit's file list; none touch any of the five tracked files.
    drift if it continues, though it isn't one of the six formal decisions.
 4. `batch_dedup`/`recent_history` `failed_open` both eased this reading
    (15/241, 4/241) — rolling-window easing, not a reversal; keep watching.
+5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
+   set, decision 5 cost link) unchanged.
+
+### 2026-10-17 (diagnosis-review) — the 7-day no-review streak broke, but not by human review: a brand-new dispute was auto-resolved the same second it was filed; `quality`'s scoped drop rate holds flat just above the informal 45% line (46.0%); build p50 byte-identical again; no new code
+
+**Environment note:** no `.env`/`.env.local` present, no `ANTHROPIC_API_KEY`
+in the process environment. Live, read-only Supabase MCP connection to the
+production project (`grixooyecvnugpxvcbct`) available; numbers below
+reproduce `check-question-lifecycle.mjs`'s exact queries by hand.
+
+**`#1702` dispute queue: `max(reviewed_at)` moved for the first time since
+2026-10-09, but it's not backlog review — it's a new dispute that resolved
+itself instantly.** `GradeDispute` status counts (all-time): `pending`
+**52** (up from 51), `alternative_added` **35** (up from 34), `dismissed` 5
+(unchanged) — 92 total, up from 90 (2 new submissions). `max(reviewed_at)`
+is now **2026-10-16T17:31:03.485Z**, a full week after the prior
+2026-10-09T21:54:03.529Z reading. Pulled the specific row
+(`f8b8a080-4a60-4cd8-9410-ebeec0fb655d`): its `reviewed_at`
+(17:31:03.485Z) and `created_at` (17:31:03.909716Z) are the same instant to
+the millisecond — this is the `#1709` "argue your point" reason-backed
+recheck flow (`player_argument` column, noted in
+`answer-leak-domain-drift-plan.md`'s 2026-09-24 entry) auto-adjudicating a
+fresh dispute on submission, not a human clearing the backlog. **The
+52-row pending backlog itself did not shrink** — it grew by 2 net new
+unreviewed submissions this period, same as every reading since
+2026-10-09. Decision 4 (Phase 4's labeled set) is exactly where it was;
+flagging the `max(reviewed_at)` move only so it isn't misread as "a human
+reviewed something" in a future pass.
+
+**`subject_entity` coverage holds at 100%** since `#1698`'s hard
+requirement (2026-09-16T22:07:16Z): **0** rows generated since that
+timestamp are missing it.
+
+**`batch_dedup` / `recent_history` / `quality`, re-queried (trailing 14
+days, `scope='daily_build'`):**
+
+| gate | considered | dropped | failed_open |
+|---|---:|---:|---:|
+| `recent_history` | 211 | 23 | 2 |
+| `batch_dedup` | 211 | 2 | 11 |
+| `quality` | 211 | 97 (46.0%) | 0 |
+
+`considered` fell 241→211 — the rolling 14-day window again, consistent
+with this doc's own convention. `recent_history`'s `failed_open` eased
+further (4→2). `batch_dedup`'s `failed_open` eased further (15→11), same
+rolling-window mechanism. `quality`'s scoped drop rate is **46.0%**,
+essentially flat versus yesterday's 46.1% that first crossed the informal
+45% watch-line — not escalating further this reading, still not one of
+this doc's six formal §2 decisions. Not root-causing the drift this pass
+(recon only).
+
+**Build-time p50 (trailing 14 days, `outcome='built'`, `user_visible_ms`):
+37,297ms** (n=35), byte-identical to the last two readings — still well
+above the 25,243ms pre-deploy baseline. Cross-checked against
+`daily-build-latency-deferral-plan.md`'s reading today (also run this
+session): outlier share 33.3%, one new outlier from the 2026-10-16 cron;
+the standing explanation (the untraced outlier cluster) is unchanged.
+
+**No code change since the last review** to this doc's own tracked files
+(`verification-gating.test.ts`, `check-question-lifecycle.mjs`,
+`src/server/llm/recheck.ts`, `src/server/db/queries/grade-disputes.ts`,
+`src/server/db/queries/write-mastery-event.ts`) — `git log` on all five
+shows nothing past the 2026-10-07 commit this doc already logged. The one
+commit on `main` since the last review (`4712e2b`, "Batch-API mode for the
+vet-questions and backfill-supply crons," `#1799`) touches neither the
+Daily Five build path nor any of the five tracked files — confirmed by
+diffing its file list.
+
+**No decision-resolving change to the six items in §2.** Status stays
+`active`.
+
+### Next steps (unchanged)
+1. Decision 4 still needs Phase 4's labeled set — unchanged; the pending
+   backlog (now 52) has not shrunk via human review, only grown.
+2. Once the outlier builds are traced (per the cross-referenced doc),
+   re-check whether this doc's build-time p50 recovers.
+3. Watch whether `quality`'s scoped drop rate keeps climbing past 46% —
+   held flat this reading (46.0% vs 46.1%), still not one of the six formal
+   decisions.
+4. `batch_dedup`/`recent_history` `failed_open` both eased again this
+   reading — rolling-window easing, not a reversal; keep watching.
 5. Everything else (Phase 3 verification-hold decision, Phase 4 labeled
    set, decision 5 cost link) unchanged.

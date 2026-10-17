@@ -2,7 +2,7 @@
 name: daily-build-latency-deferral-plan
 status: active
 opened: 2026-09-04
-last-reviewed: 2026-10-16
+last-reviewed: 2026-10-17
 owner: Josh
 related-pr: "#1620, #1626"
 ---
@@ -3280,6 +3280,82 @@ its cost) remains open and unresolved.
    (64.4s) #2; `05589486-…` (60.6s) #3; `459c10fc-…` (54.1s) #4 — newly
    added to this list, was previously omitted; `00bc82e4-…` (45.6s) #5.
    Today's new outlier (`5617d936-…`, 40.0s) lands at #7.
+3. The three `deferred: false` rows still need a Vercel-log trace of why
+   `after()` was unavailable on those builds specifically — no new
+   occurrence since 2026-10-05.
+4. Watch for the first `outcome='lost_persist_race'` row — needs DB access.
+
+### 2026-10-17 (diagnosis-review) — two new rows from the 2026-10-16 cron, one a new outlier (22.9s residual, small-bonus/huge-saved shape); outlier share edges up to 33.3%; `verify:build-latency-anomaly` now seventeen reviews overdue; still zero lost-persist-race rows; no code touches the persist mechanism
+
+**Environment note (unchanged):** no `.env`/`.env.local` present this
+session either, so `npm run check:build-latency` still can't run directly —
+reproduced its exact queries (totals by outcome, `saved`/bonus-cost/residual
+via `jsonb_array_elements` over `rounds` filtered to `phase='bonus'`)
+directly against the live DB via the Supabase MCP connection, same formula as
+every prior review. `verify:build-latency-anomaly` stays unrun per this
+doc's own §7 convention (write-capable) — now overdue for a **seventeenth**
+consecutive review.
+
+**`DailyBuildMetric` totals:** `built=94` (up from 92), `carry_forward=954`
+(up from 930), `existing_queue=80` (up from 79), `partial_carry_forward=6`
+(up from 5 — not a metric this doc tracks closely, noted for completeness
+only). **`outcome='lost_persist_race'` is still 0 rows** (absent from the
+outcome breakdown entirely), cumulative, all time — no change from every
+prior reading.
+
+**Two new rows, both from the 2026-10-16 17:05 UTC cron, both
+`deferred=true`:**
+
+| build_id | span_ms | user_visible_ms | saved | bonus cost | residual | Phase 3a |
+|---|---:|---:|---:|---:|---:|---|
+| `bca1927e-…` | 53,365 | 37,138 | 16,227 | 14,873 | 1,354 — normal band | PASS |
+| `cc1d6718-…` | 41,755 | 18,009 | 23,746 | 836 | **22,910 — new outlier** | PASS |
+
+**One of two is a new outlier**, same recurring small-bonus/huge-residual
+shape as the last several outliers (`cc1d6718-…`'s bonus cost is only 836ms
+against a 23,746ms saving) — but at 22,910ms it does not disturb the
+corrected top-10 from the 2026-10-16 review (10th place is still 30,479ms),
+so no ranking change this time.
+
+**Outlier/elevated count (residual ≥ 15,000ms), recomputed over the full
+`deferred:true` population via SQL:** now **31**, of **93** (up from 30 of
+88) — share is **33.3%** (was 34.1%), still inside the established ~⅓ noise
+band.
+
+**3b population: median saving 15,546ms** (n=93, down slightly from the
+last review's 15,627ms at n=88 — the two new values straddled the existing
+median on the low side).
+
+**Phase 3a (mechanism) holds on both new rows** (`saved ≥` each build's own
+bonus cost, by a wide margin on both).
+
+**No third occurrence of anything new on the `deferred: false` front** —
+still exactly 3 rows, same as every review since 2026-10-05.
+
+**No commits touch this doc's tracked mechanism since the last review.**
+`git log` on `queue-orchestrator.ts`, `src/server/db/queries/daily.ts`'s
+persist logic, `build-context.ts`, and
+`scripts/build-latency-anomaly.verify.ts` shows nothing past the
+2026-10-07 `#1756` commit this doc already logged (this session's clone is
+shallow, truncated to 2026-10-08 onward, but that window fully covers the
+2026-10-16→2026-10-17 gap being checked here, so the absence is conclusive
+for this period). The one commit on `main` since the last review
+(`4712e2b`, "Batch-API mode for the vet-questions and backfill-supply
+crons," `#1799`) touches neither the Daily Five build path nor this doc's
+tracked files — confirmed by diffing its file list.
+
+**No decision-resolving change.** Status stays `active`. One more outlier
+and a slightly lower median are both more precision on an already-open
+question, not new evidence resolving it — Question 4 (is the bonus worth
+its cost) remains open and unresolved.
+
+### Next steps (unchanged)
+1. Re-run `npm run verify:build-latency-anomaly` to confirm Scenario A/B
+   against `#1734`'s conflict strategy — now **seventeen** reviews overdue.
+2. Trace the thirty-one outsized/elevated-residual builds — needs Vercel
+   function logs. Top-5 unchanged from the 2026-10-16 correction:
+   `90da8604-…` (82.9s) #1; `a1e79665-…` (64.4s) #2; `05589486-…` (60.6s) #3;
+   `459c10fc-…` (54.1s) #4; `00bc82e4-…` (45.6s) #5.
 3. The three `deferred: false` rows still need a Vercel-log trace of why
    `after()` was unavailable on those builds specifically — no new
    occurrence since 2026-10-05.
