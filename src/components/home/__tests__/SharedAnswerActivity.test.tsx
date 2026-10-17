@@ -12,6 +12,14 @@ const item: SharedAnswer = {
   happenedAt: '2026-10-15T12:00:00Z', friends: [{ userId: 'chiann', name: 'Chiann', fromYourFeed: false }],
 }
 describe('shared-answer presentation', () => {
+  it('keeps each friend’s triangle color stable across topics, names, and row order', () => {
+    const david = { userId: 'david', name: 'David', fromYourFeed: false }
+    const colors = (items: SharedAnswer[]) => [...renderToStaticMarkup(<SharedAnswerActivity items={items} />).matchAll(/href="\/users\/([^\"]+)"[^>]*><svg[^>]*fill="([^\"]+)"/g)].map((match) => [match[1], match[2]])
+    const first = colors([item, { ...item, questionId: 'q2', friends: [david] }])
+    const reordered = colors([{ ...item, questionId: 'q3', topic: 'Another topic', friends: [david, { ...item.friends[0], name: 'Renamed friend' }] }, item])
+    expect(first[0][1]).not.toBe(first[1][1])
+    expect(reordered).toEqual([first[1], first[0], first[0]])
+  })
   it('shows every question and answer without disclosure controls', () => {
     const html = renderToStaticMarkup(<SharedAnswerActivity items={[item, { ...item, questionId: 'q2', questionText: 'Second question', correctAnswer: 'Second answer' }]} />)
     for (const text of ['rocked ', 'Bach concertos', item.questionText, item.correctAnswer, 'Second question', 'Second answer', 'href="/users/chiann"']) expect(html).toContain(text)
