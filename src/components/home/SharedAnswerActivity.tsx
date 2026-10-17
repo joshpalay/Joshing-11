@@ -23,9 +23,8 @@ export function SharedAnswerActivity({ items }: { items: SharedAnswer[] }) {
                 </Link>
               </span>
             ))}
-            {item.friends.every((friend) => friend.fromYourFeed)
-              ? ' nailed this too.'
-              : item.friends.length === 1 ? ' both rocked this.' : ' all rocked this.'}
+            {' rocked '}{item.topic?.trim() || item.domain?.trim() || 'this one'}
+            {item.friends.every((friend) => friend.fromYourFeed) ? ' too.' : '.'}
           </h3>
           <p className="font-serif text-xl leading-relaxed font-medium">{item.questionText}</p>
           <div className="mt-2 flex items-start justify-between gap-3">

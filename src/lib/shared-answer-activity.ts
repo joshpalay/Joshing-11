@@ -3,6 +3,7 @@ export type SharedAnswerActivity = {
   questionText: string
   correctAnswer: string
   domain?: string | null
+  topic?: string | null
   happenedAt: string
   friends: Array<{ userId: string; name: string; fromYourFeed: boolean }>
 }
@@ -13,6 +14,8 @@ export type SharedAnswerEvidence = {
   questionText: string
   correctAnswer: string
   domain?: string | null
+  shortLabel?: string | null
+  subjectEntity?: string | null
   answeredAt: Date
   answerId: string | null
 }
@@ -25,6 +28,17 @@ export type SharedFeedEvidence = {
   sourceType: string
   sourceResult: string | null
   sourceEventAt: Date
+}
+
+// Prefer a question-specific label over the broader territory name. Existing
+// subject metadata gives entity-focused questions a natural headline without
+// guessing a topic from the question text or changing the stored domain.
+export function sharedAnswerTopic(answer: Pick<SharedAnswerEvidence, 'shortLabel' | 'subjectEntity' | 'domain'>): string | null {
+  const label = answer.shortLabel?.trim()
+  if (label) return label
+  const subject = answer.subjectEntity?.trim()
+  if (subject) return /\bknowledge$/i.test(subject) ? subject : subject + ' knowledge'
+  return answer.domain?.trim() || null
 }
 
 // A feed answer records its exact feed id. Milestone answers don't retain the
@@ -82,6 +96,7 @@ export function deriveSharedAnswerActivity(
           questionText: viewer.questionText,
           correctAnswer: viewer.correctAnswer,
           domain: viewer.domain ?? null,
+          topic: sharedAnswerTopic(viewer),
           happenedAt: new Date(happenedAt).toISOString(),
           friends: [],
         }
