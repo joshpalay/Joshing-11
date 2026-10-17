@@ -22,7 +22,6 @@ import { hasEligibleReturnCandidates } from '@/server/db/queries/missed-return'
 import { isMissedReturnEnabled } from '@/server/daily/missed-return'
 import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
 import { shouldShowWelcomeTour } from '@/server/welcome-tour'
-import { RecentActivityComparison } from '@/components/home/RecentActivityComparison'
 import { getSharedAnswerActivity } from '@/server/db/queries/shared-answer-activity'
 import { HOME_WINDOW_DAYS } from '@/server/home/select-edition'
 
@@ -31,7 +30,7 @@ const FEED_PAGE_SIZE = 20
 export default async function Home({ searchParams }: {
   searchParams: Promise<{ recentActivity?: string | string[] }>
 }) {
-  const sharedActivity = (await searchParams).recentActivity === 'shared'
+  const sharedActivity = (await searchParams).recentActivity !== 'current'
   const session = await getSession()
   // First-player orientation is earned by completing the first Daily Five.
   // Eligibility and seen-state are durable and account-scoped, so the tour
@@ -70,8 +69,6 @@ export default async function Home({ searchParams }: {
           backgroundRepeat: 'no-repeat',
         }}
       />
-
-      {session && !tourActive ? <RecentActivityComparison shared={sharedActivity} /> : null}
 
       {/* Today's Five — a card, so it can ride over the top triangle band. */}
       {session ? (

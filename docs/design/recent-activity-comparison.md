@@ -1,10 +1,8 @@
 # Recent Activity comparison
 
-Home has a Current / New version selector at the top. The default, including a visit to `/` without parameters, is Current.
+Home now shows the shared-answer view by default, without a version toggle.
 
-- `/?recentActivity=current` selects the existing activity stream.
-- `/?recentActivity=shared` selects the new shared-answer view.
-- Selecting Current switches back immediately. Refresh and browser history preserve the selection through the URL. The new query runs only for the shared view.
+For a quick operational fallback, `/?recentActivity=current` still selects the existing activity stream. The default `/` and the earlier `/?recentActivity=shared` link show the new view. The new query runs only when the shared view is selected.
 
 The new view shows each qualifying question and its answer openly, with linked friend names and the existing Send in Joshing / Text it menu. It includes new shared correct answers, including friends playing from your activity and matches found independently. It excludes the known relationship when you answer a question from that friend's existing feed or bundle. Several qualifying friends share one question entry.
 
@@ -14,9 +12,9 @@ This change only reads existing data. It introduces no schema changes, migration
 
 ## Reverting
 
-For an immediate visual switch, choose Current at the top of Home or visit `/?recentActivity=current`. No deployment is required to make that choice.
+For an immediate fallback, visit `/?recentActivity=current`. The fallback remains available without adding comparison controls to Home.
 
-For a complete code rollback, revert the single commit that adds this comparison using `git revert <comparison-commit>`, then deploy that revert normally. No database cleanup is needed.
+For a complete code rollback, revert this default-view update, then revert the original comparison commit (`d953e326`), and deploy normally. No database cleanup is needed.
 
 ## Validation
 
