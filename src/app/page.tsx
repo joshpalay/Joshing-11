@@ -24,14 +24,15 @@ import WelcomeTourScreen from '@/components/welcome/WelcomeTourScreen'
 import { shouldShowWelcomeTour } from '@/server/welcome-tour'
 import { getSharedAnswerActivity } from '@/server/db/queries/shared-answer-activity'
 import { HOME_WINDOW_DAYS } from '@/server/home/select-edition'
+import { getRecentActivityVersion } from '@/server/home/recent-activity-version'
 
 const FEED_PAGE_SIZE = 20
 
 export default async function Home({ searchParams }: {
   searchParams: Promise<{ recentActivity?: string | string[] }>
 }) {
-  const sharedActivity = (await searchParams).recentActivity !== 'current'
   const session = await getSession()
+  const sharedActivity = (await getRecentActivityVersion(session?.userId ?? null, (await searchParams).recentActivity)) === 'shared'
   // First-player orientation is earned by completing the first Daily Five.
   // Eligibility and seen-state are durable and account-scoped, so the tour
   // survives missed redirects without leaking between test accounts/devices.
