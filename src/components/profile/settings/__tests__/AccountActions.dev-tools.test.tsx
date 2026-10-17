@@ -12,6 +12,14 @@ import { AccountActions } from '../AccountActions';
  * tool participates in a route-exists check driven by `availableToolHrefs`.
  */
 describe('AccountActions — dev-tools grouping & availability', () => {
+  it('places the Recent Activity switch inside admin developer tools only', () => {
+    const admin = renderToStaticMarkup(<AccountActions isAdmin />);
+    expect(admin).toContain('Use new Recent Activity');
+    expect(admin.indexOf('Use new Recent Activity')).toBeGreaterThan(admin.indexOf('Developer tools'));
+    expect(admin.indexOf('Use new Recent Activity')).toBeLessThan(admin.indexOf('Account</h2>'));
+    expect(renderToStaticMarkup(<AccountActions isAdmin={false} />)).not.toContain('Use new Recent Activity');
+  });
+
   it('renders the four eyebrow groups', () => {
     const html = renderToStaticMarkup(<AccountActions isAdmin />);
     expect(html).toContain('First-time experience');

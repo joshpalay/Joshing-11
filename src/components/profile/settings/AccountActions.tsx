@@ -30,6 +30,7 @@ import { useState } from 'react';
 import { clearCachedLoadingMomentPayload } from '@/components/loading-moment/client-cache';
 import { SettingsGroup, SettingsRow } from '@/components/profile/SettingsRow';
 import { ResetWelcomeTourButton } from '@/components/profile/settings/ResetWelcomeTourButton';
+import { RecentActivityDevToggle } from '@/components/profile/settings/RecentActivityDevToggle';
 
 /**
  * Log out, then redirect. `destroySession()` clears the `joshing_session`
@@ -436,6 +437,7 @@ export function AccountActions({
         <section className="mb-8">
           <h2 className="mb-3 font-serif text-2xl font-semibold">Developer tools</h2>
           <div className="flex flex-col gap-5">
+            <RecentActivityDevToggle />
             {devToolGroups.map((group) => (
               <div key={group.eyebrow}>
                 <p className="text-muted-foreground mb-2 px-1 font-mono text-[0.62rem] font-semibold tracking-[0.06em] uppercase">

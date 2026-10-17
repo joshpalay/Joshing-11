@@ -140,6 +140,24 @@ function render(props: any): string {
 }
 
 describe('FeedList — budgeted home edition (D-HOME-PACING-01)', () => {
+  it('swaps only Recent Activity in the new comparison and shows shared answers on an otherwise empty page', () => {
+    const sharedAnswers = [{ questionId: 'bach', questionText: 'Who composed these concertos?', correctAnswer: 'Bach', happenedAt: '2026-10-15T12:00:00Z', friends: [{ userId: 'chiann', name: 'Chiann', fromYourFeed: true }] }]
+    const base = {
+      unifiedHome: true,
+      initialPage: { viewer_user_id: 'me', meta: META, items: [], has_more: false, next_cursor: null },
+      budget: { directOverflowCount: 0, playablesOverflowCount: 0, panel: null, isAllEmpty: false },
+    }
+    const html = render({ ...base, activityItems: [playable('p0', 'chiann'), texture('t0')], sharedAnswers })
+    expect(html).toContain('activity:p0:chiann')
+    expect(html).toContain('Who composed these concertos?')
+    expect(html).toContain('Bach')
+    expect(html).not.toContain('activity:t0:')
+    expect(html).not.toContain('See more activity')
+    const empty = render({ ...base, activityItems: [], sharedAnswers })
+    expect(empty).toContain('Who composed these concertos?')
+    expect(empty).not.toContain('Quiet today')
+    expect(render({ ...base, activityItems: [], sharedAnswers: [] })).toContain('No new shared answers this week.')
+  })
   it('renders served slices with a quiet "N more →" affordance per question zone', () => {
     const html = render({
       unifiedHome: true,
