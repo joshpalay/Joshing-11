@@ -146,6 +146,8 @@ export default function DailySummaryPage() {
       points_gained_this_round: gain.pointsGained,
       tier_current: gain.currentTier,
       tier_before: crossingByDomain.get(gain.domain)?.fromTier,
+      area_rank: gain.areaRank,
+      is_new_territory: gain.isNewTerritory,
     }))
   }, [summary])
   const firstTierCrossing = summary?.tierCrossings[0] ?? null

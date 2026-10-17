@@ -203,6 +203,12 @@ export type DomainGain = {
   totalPoints: number;
   currentTier: MasteryTier;
   isNewTerritory: boolean;
+  /**
+   * Where this area ranks among ALL the player's areas by total points (1 =
+   * biggest). Lets the recap say "Your #1 area" so a big area reads as big,
+   * not just as "+50 today". Null when the area has no mastery row yet.
+   */
+  areaRank: number | null;
 };
 
 export type TierCrossing = {
@@ -352,6 +358,20 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
         ))
     : [];
   const masteryByDomain = new Map(masteryRows.map((row) => [row.domain, row]));
+  // Every area's total, so each gained area can be ranked against the whole
+  // knowledge base (the recap's "Your #N area" line). One row per area the
+  // player has ever touched — small.
+  const allTotals =
+    touchedDomains.size > 0
+      ? (
+          await db
+            .select({ totalPoints: playerMastery.totalPoints })
+            .from(playerMastery)
+            .where(eq(playerMastery.userId, userId))
+        ).map((row) => Number(row.totalPoints ?? 0))
+      : [];
+  const rankForTotal = (total: number): number =>
+    1 + allTotals.filter((other) => other > total).length;
 
   const tierCrossings: TierCrossing[] = [...pointsByDomain.entries()]
     .map(([domain, pointsGained]) => {
@@ -488,6 +508,9 @@ export async function getDailySummary(userId: string, date: Date): Promise<Daily
         totalPoints: Number(masteryByDomain.get(domain)?.totalPoints ?? pointsByDomain.get(domain) ?? 0),
         currentTier: masteryByDomain.get(domain)?.tier ?? resolveTier(pointsByDomain.get(domain) ?? 0),
         isNewTerritory: newTerritory.includes(domain),
+        areaRank: masteryByDomain.has(domain)
+          ? rankForTotal(Number(masteryByDomain.get(domain)?.totalPoints ?? 0))
+          : null,
       }))
       .sort((a, b) => b.pointsGained - a.pointsGained || a.displayName.localeCompare(b.displayName)),
     newTerritory,
